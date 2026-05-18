@@ -1,0 +1,12 @@
+export default function RootLoading() {
+  return (
+    <main className="min-h-screen bg-[#f8fafc] px-4 py-10">
+      <div className="mx-auto max-w-4xl rounded-2xl border border-[#e5e7eb] bg-white p-6 shadow-sm">
+        <div className="flex items-center gap-3">
+          <span className="h-4 w-4 animate-spin rounded-full border-2 border-violet-600 border-t-transparent" />
+          <p className="text-sm font-medium text-[#64748b]">Cargando LeadWeb AI...</p>
+        </div>
+      </div>
+    </main>
+  );
+}
