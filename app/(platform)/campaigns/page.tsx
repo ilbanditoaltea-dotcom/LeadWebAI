@@ -1,5 +1,6 @@
 import { type CampaignLead } from "@/app/components/campaigns/campaigns-kanban";
 import { CampaignKanban } from "@/app/components/campaigns/campaign-kanban";
+import { AutopilotRunner } from "@/app/components/campaigns/autopilot-runner";
 import { createSupabaseServerClient } from "@/src/lib/supabase/server";
 import { hasValidSupabaseEnv } from "@/src/lib/supabase/env";
 import { demoBusinessCases } from "@/app/lib/demo-business-cases";
@@ -88,5 +89,10 @@ async function getCampaignLeads() {
 
 export default async function CampaignsPage() {
   const { leads, useSupabase } = await getCampaignLeads();
-  return <CampaignKanban initialLeads={leads} useSupabase={useSupabase} />;
+  return (
+    <div className="space-y-6">
+      <AutopilotRunner />
+      <CampaignKanban initialLeads={leads} useSupabase={useSupabase} />
+    </div>
+  );
 }

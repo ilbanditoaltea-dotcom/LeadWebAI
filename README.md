@@ -32,6 +32,12 @@ cp .env.example .env.local
 NEXT_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 OPENAI_API_KEY=your_openai_api_key
+SERPER_API_KEY=your_serper_api_key
+FIRECRAWL_API_KEY=your_firecrawl_api_key
+SCRAPINGBEE_API_KEY=your_scrapingbee_api_key
+BROWSERLESS_WS=ws://your-browserless-endpoint
+REDIS_URL=redis://your-redis-endpoint
+CRON_SECRET=your_random_cron_secret
 ```
 
 ## Scripts
@@ -78,3 +84,31 @@ vercel --prod
 
 - No se incluyen claves reales en código fuente.
 - Las claves deben ir únicamente en variables de entorno (`.env.local` en local y variables de proyecto en Vercel).
+
+## Autopilot MVP
+
+Se añadió un flujo automático para campañas:
+
+- Endpoint: `POST /api/agent/run-campaign`
+- Input:
+
+```json
+{
+  "city": "Alicante",
+  "category": "restaurant",
+  "limit": 8,
+  "channel": "email"
+}
+```
+
+Flujo que ejecuta:
+
+1. Descubre negocios (`SERPER_API_KEY`) o usa fallback.
+2. Crea leads en Supabase.
+3. Escanea web (`FIRECRAWL_API_KEY` o `SCRAPINGBEE_API_KEY`, con fallback fetch).
+4. Analiza negocio con IA (si `OPENAI_API_KEY` válida; si no, fallback heurístico).
+5. Genera demo web y mensaje comercial.
+6. Mueve lead a `pending_approval` y registra actividades.
+
+Panel de disparo manual:
+- `/campaigns` -> sección **Autopilot Campaign Runner**.
