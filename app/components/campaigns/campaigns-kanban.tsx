@@ -12,7 +12,6 @@ import {
   CartesianGrid,
   Line,
   LineChart,
-  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
@@ -315,9 +314,8 @@ export function CampaignsKanban({ initialLeads, useSupabase }: CampaignsKanbanPr
         </SectionCard>
 
         <SectionCard title="Gráficos de rendimiento" subtitle="Apertura, respuesta y cierres">
-          <div className="h-64 min-h-[256px] w-full min-w-0">
-            <ResponsiveContainer width="100%" height="100%" minWidth={280} minHeight={220}>
-              <LineChart data={performanceData}>
+          <div className="w-full overflow-x-auto">
+            <LineChart width={640} height={240} data={performanceData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                 <XAxis dataKey="name" tickLine={false} axisLine={false} />
                 <YAxis tickLine={false} axisLine={false} />
@@ -325,8 +323,7 @@ export function CampaignsKanban({ initialLeads, useSupabase }: CampaignsKanbanPr
                 <Line type="monotone" dataKey="apertura" stroke="#7c3aed" strokeWidth={2.5} />
                 <Line type="monotone" dataKey="respuesta" stroke="#22c55e" strokeWidth={2} />
                 <Line type="monotone" dataKey="clientes" stroke="#f59e0b" strokeWidth={2} />
-              </LineChart>
-            </ResponsiveContainer>
+            </LineChart>
           </div>
           <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-2">
