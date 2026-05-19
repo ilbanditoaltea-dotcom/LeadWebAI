@@ -32,6 +32,20 @@ const goalOptions: GoalOption[] = [
   { value: "leads", label: "Leads", websiteGoal: "capture_leads" },
 ];
 
+type StylePresetOption = {
+  id: string;
+  label: string;
+  instruction: string;
+};
+
+const stylePresetOptions: StylePresetOption[] = [
+  { id: "premium", label: "Premium elegante", instruction: "Hazlo premium, elegante y de alto ticket con contraste limpio y visuales editoriales." },
+  { id: "minimal", label: "Minimal moderno", instruction: "Hazlo minimalista moderno, con mucho aire visual, tipografía clara y bloques limpios." },
+  { id: "warm", label: "Cálido mediterráneo", instruction: "Hazlo cálido mediterráneo, acogedor y gourmet, con tonos naturales y atmósfera artesanal." },
+  { id: "dark", label: "Dark sofisticado", instruction: "Hazlo dark sofisticado con branding fuerte, acentos intensos y estilo premium nocturno." },
+  { id: "urban", label: "Urbano enérgico", instruction: "Hazlo urbano dinámico, directo a conversión, con ritmo visual y CTAs muy visibles." },
+];
+
 const detectedProblems = [
   "web antigua",
   "sin reservas online",
@@ -322,6 +336,8 @@ export function AiGeneratorWorkbench({ initialLeads }: AiGeneratorWorkbenchProps
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
   const [apiPreviewWebsite, setApiPreviewWebsite] = useState<GeneratedWebsite | null>(null);
+  const [selectedStylePresetId, setSelectedStylePresetId] = useState(stylePresetOptions[0].id);
+  const [customStyleInstruction, setCustomStyleInstruction] = useState("");
 
   const previewWebsite = useMemo(
     () => apiPreviewWebsite ?? buildPreviewWebsite(form),
@@ -335,6 +351,12 @@ export function AiGeneratorWorkbench({ initialLeads }: AiGeneratorWorkbenchProps
   const selectedGoalLabel =
     goalOptions.find((goal) => goal.value === form.goal)?.label ?? "Reservas";
   const primaryBusinessObjectiveLabel = `Mejorar negocio online (enfoque: ${selectedGoalLabel.toLowerCase()})`;
+  const selectedStylePreset =
+    stylePresetOptions.find((preset) => preset.id === selectedStylePresetId) ?? stylePresetOptions[0];
+  const resolvedStyleInstruction =
+    customStyleInstruction.trim().length >= 3
+      ? customStyleInstruction.trim()
+      : selectedStylePreset.instruction;
 
   const updateForm = <K extends keyof GeneratorForm>(key: K, value: GeneratorForm[K]) => {
     setForm((current) => ({ ...current, [key]: value }));
@@ -534,15 +556,16 @@ export function AiGeneratorWorkbench({ initialLeads }: AiGeneratorWorkbenchProps
   async function handlePartialRegeneration(
     mode: "style" | "copy" | "sections" | "hero",
     defaultInstruction: string,
+    options?: { skipPrompt?: boolean; overrideInstruction?: string },
   ) {
     if (!generatedWebsiteId.trim()) {
       setActionFeedback("Introduce un generatedWebsiteId valido para usar regeneracion parcial.");
       return;
     }
 
-    const instruction =
-      window.prompt("Instrucción para IA", defaultInstruction)?.trim() ||
-      defaultInstruction;
+    const instruction = options?.skipPrompt
+      ? options.overrideInstruction?.trim() || defaultInstruction
+      : window.prompt("Instrucción para IA", defaultInstruction)?.trim() || defaultInstruction;
 
     try {
       setIsActionLoading(true);
@@ -657,7 +680,8 @@ export function AiGeneratorWorkbench({ initialLeads }: AiGeneratorWorkbenchProps
               onClick={() =>
                 handlePartialRegeneration(
                   "style",
-                  "Hazlo más premium y elegante",
+                  resolvedStyleInstruction,
+                  { skipPrompt: true, overrideInstruction: resolvedStyleInstruction },
                 )
               }
               disabled={isActionLoading}
@@ -736,6 +760,35 @@ export function AiGeneratorWorkbench({ initialLeads }: AiGeneratorWorkbenchProps
               Publicar demo
             </button>
           </div>
+        </div>
+        <div className="mt-3 grid gap-3 rounded-xl border border-violet-100 bg-violet-50/50 p-3 md:grid-cols-[220px_minmax(0,1fr)]">
+          <label className="space-y-1">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              Estilo sugerido
+            </span>
+            <select
+              value={selectedStylePresetId}
+              onChange={(event) => setSelectedStylePresetId(event.target.value)}
+              className="w-full rounded-lg border border-violet-200 bg-white px-3 py-2 text-sm text-slate-900"
+            >
+              {stylePresetOptions.map((preset) => (
+                <option key={preset.id} value={preset.id}>
+                  {preset.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="space-y-1">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              Instrucción personalizada (opcional)
+            </span>
+            <input
+              value={customStyleInstruction}
+              onChange={(event) => setCustomStyleInstruction(event.target.value)}
+              placeholder={selectedStylePreset.instruction}
+              className="w-full rounded-lg border border-violet-200 bg-white px-3 py-2 text-sm text-slate-900"
+            />
+          </label>
         </div>
       </section>
 
