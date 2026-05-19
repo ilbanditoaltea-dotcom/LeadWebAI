@@ -1,13 +1,28 @@
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { hasValidSupabaseEnv } from "@/src/lib/supabase/env";
 import { createSupabaseServerClient } from "@/src/lib/supabase/server";
+import type { Database } from "@/src/lib/supabase/database.types";
 
 const clearSchema = z.object({
   confirmText: z.string(),
 });
 
 const REQUIRED_CONFIRM_TEXT = "BORRAR PRUEBAS";
+
+async function getSupabaseForDangerZone() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (supabaseUrl && serviceRoleKey) {
+    return createClient<Database>(supabaseUrl, serviceRoleKey, {
+      auth: { persistSession: false },
+    });
+  }
+
+  return createSupabaseServerClient();
+}
 
 export async function POST(request: Request) {
   try {
@@ -27,8 +42,9 @@ export async function POST(request: Request) {
       );
     }
 
-    const supabase = await createSupabaseServerClient();
+    const supabase = await getSupabaseForDangerZone();
     const errors: string[] = [];
+    const deletedRows: Record<string, number> = {};
 
     const operations = [
       { table: "generated_website_versions", key: "id" },
@@ -40,12 +56,15 @@ export async function POST(request: Request) {
     ] as const;
 
     for (const operation of operations) {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from(operation.table)
         .delete()
+        .select(operation.key)
         .not(operation.key, "is", null);
       if (error) {
         errors.push(`${operation.table}: ${error.message}`);
+      } else {
+        deletedRows[operation.table] = data?.length ?? 0;
       }
     }
 
@@ -56,7 +75,7 @@ export async function POST(request: Request) {
       );
     }
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, deletedRows });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 400 });

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { AlertTriangle, Loader2, Save, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { SectionCard } from "@/app/components/ui/section-card";
 import type { PlatformBrandSettings } from "@/src/lib/settings/platform-brand";
 
@@ -12,6 +13,7 @@ type PlatformBrandSettingsFormProps = {
 export function PlatformBrandSettingsForm({
   initialValue,
 }: PlatformBrandSettingsFormProps) {
+  const router = useRouter();
   const [form, setForm] = useState<PlatformBrandSettings>(initialValue);
   const [isSaving, setIsSaving] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
@@ -57,15 +59,21 @@ export function PlatformBrandSettingsForm({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ confirmText: confirmation }),
       });
-      const json = (await response.json()) as { error?: string };
+      const json = (await response.json()) as {
+        error?: string;
+        deletedRows?: Record<string, number>;
+      };
       if (!response.ok) {
         setFeedback(json.error ?? "No se pudo borrar los datos de prueba.");
         return;
       }
 
-      setFeedback(
-        "Datos de prueba eliminados: leads, demos, campañas, mensajes, actividad e historial.",
+      const totalDeleted = Object.values(json.deletedRows ?? {}).reduce(
+        (acc, value) => acc + value,
+        0,
       );
+      setFeedback(`Limpieza completada. Registros eliminados: ${totalDeleted}.`);
+      router.refresh();
     } catch {
       setFeedback("Error inesperado al borrar datos de prueba.");
     } finally {

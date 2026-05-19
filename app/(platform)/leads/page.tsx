@@ -1,6 +1,7 @@
 import { LeadsTable, type LeadTableRow } from "@/app/components/dashboard/leads-table";
 import { SectionCard } from "@/app/components/ui/section-card";
 import { recentLeads } from "@/app/lib/mock-data";
+import { hasValidSupabaseEnv } from "@/src/lib/supabase/env";
 import { createSupabaseServerClient } from "@/src/lib/supabase/server";
 import type { Database } from "@/src/lib/supabase/database.types";
 
@@ -62,7 +63,14 @@ function mapMockLeadToTableRow(): LeadTableRow[] {
   }));
 }
 
-async function getLeadsForTable(): Promise<{ leads: LeadTableRow[]; source: "supabase" | "mock" }> {
+async function getLeadsForTable(): Promise<{
+  leads: LeadTableRow[];
+  source: "supabase" | "supabase_empty" | "mock";
+}> {
+  if (!hasValidSupabaseEnv()) {
+    return { leads: mapMockLeadToTableRow(), source: "mock" };
+  }
+
   try {
     const supabase = await createSupabaseServerClient();
     const { data, error } = await supabase
@@ -71,8 +79,12 @@ async function getLeadsForTable(): Promise<{ leads: LeadTableRow[]; source: "sup
       .order("created_at", { ascending: false })
       .limit(20);
 
-    if (error || !data || data.length === 0) {
+    if (error || !data) {
       return { leads: mapMockLeadToTableRow(), source: "mock" };
+    }
+
+    if (data.length === 0) {
+      return { leads: [], source: "supabase_empty" };
     }
 
     return { leads: data.map(mapDbLeadToTableRow), source: "supabase" };
@@ -84,6 +96,7 @@ async function getLeadsForTable(): Promise<{ leads: LeadTableRow[]; source: "sup
 export default async function LeadsPage() {
   const { leads, source } = await getLeadsForTable();
   const isMock = source === "mock";
+  const isEmptySupabase = source === "supabase_empty";
 
   return (
     <div className="space-y-6">
@@ -101,6 +114,17 @@ export default async function LeadsPage() {
         >
           <p className="text-sm text-slate-600">
             Inserta datos en la tabla <code>leads</code> para ver resultados reales aquí.
+          </p>
+        </SectionCard>
+      ) : null}
+
+      {isEmptySupabase ? (
+        <SectionCard
+          title="Sin leads en Supabase"
+          subtitle="La base de datos está conectada pero actualmente vacía."
+        >
+          <p className="text-sm text-slate-600">
+            Ejecuta autopilot o crea un lead para comenzar.
           </p>
         </SectionCard>
       ) : null}

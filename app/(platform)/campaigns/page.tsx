@@ -74,8 +74,12 @@ async function getCampaignLeads() {
         supabase.from("generated_websites").select("*"),
       ]);
 
-    if (leadsError || !leadsData || leadsData.length === 0) {
+    if (leadsError || !leadsData) {
       return { leads: mapMockLeadsToCampaignLeads(), useSupabase: false };
+    }
+
+    if (leadsData.length === 0) {
+      return { leads: [], useSupabase: true };
     }
 
     return {

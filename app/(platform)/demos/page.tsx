@@ -46,7 +46,7 @@ async function getDemoItems(): Promise<DemoListItem[]> {
       supabase.from("leads").select("*").limit(500),
     ]);
 
-    if (websitesError || !websitesData || websitesData.length === 0) {
+    if (websitesError || !websitesData) {
       return demoBusinessCases.map((item) => ({
         id: item.generatedWebsite.id,
         leadId: item.leadId,
@@ -57,6 +57,10 @@ async function getDemoItems(): Promise<DemoListItem[]> {
         status: item.campaignStatus,
         createdAt: null,
       }));
+    }
+
+    if (websitesData.length === 0) {
+      return [];
     }
 
     const leadsById = new Map<string, LeadRow>();

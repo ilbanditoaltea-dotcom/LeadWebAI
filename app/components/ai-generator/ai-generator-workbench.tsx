@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Building2,
   Home,
@@ -115,6 +115,36 @@ const initialForm: GeneratorForm = {
 type AiGeneratorWorkbenchProps = {
   initialLeads: AiGeneratorLeadOption[];
 };
+
+type AgentWebsiteJson = {
+  businessProfile: GeneratedWebsite["businessProfile"];
+  website: {
+    hero: GeneratedWebsite["website"]["hero"];
+    sections: GeneratedWebsite["website"]["sections"];
+  };
+  seo: GeneratedWebsite["website"]["seo"];
+  contact: GeneratedWebsite["website"]["contact"];
+  confidence: GeneratedWebsite["website"]["confidence"];
+};
+
+function mapAgentJsonToGeneratedWebsite(params: {
+  payload: AgentWebsiteJson;
+  generatedWebsiteId: string;
+  leadId: string;
+}): GeneratedWebsite {
+  return {
+    id: params.generatedWebsiteId,
+    leadId: params.leadId,
+    businessProfile: params.payload.businessProfile,
+    website: {
+      hero: params.payload.website.hero,
+      sections: params.payload.website.sections,
+      seo: params.payload.seo,
+      contact: params.payload.contact,
+      confidence: params.payload.confidence,
+    },
+  };
+}
 
 function buildFormFromLead(lead: AiGeneratorLeadOption | null): GeneratorForm {
   if (!lead) return initialForm;
@@ -281,8 +311,12 @@ export function AiGeneratorWorkbench({ initialLeads }: AiGeneratorWorkbenchProps
   const [selectedLeadId, setSelectedLeadId] = useState(initialLeads[0]?.id ?? "");
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
+  const [apiPreviewWebsite, setApiPreviewWebsite] = useState<GeneratedWebsite | null>(null);
 
-  const previewWebsite = useMemo(() => buildPreviewWebsite(form), [form]);
+  const previewWebsite = useMemo(
+    () => apiPreviewWebsite ?? buildPreviewWebsite(form),
+    [apiPreviewWebsite, form],
+  );
   const selectedLead = useMemo(
     () => initialLeads.find((lead) => lead.id === selectedLeadId) ?? null,
     [initialLeads, selectedLeadId],
@@ -294,15 +328,46 @@ export function AiGeneratorWorkbench({ initialLeads }: AiGeneratorWorkbenchProps
 
   const updateForm = <K extends keyof GeneratorForm>(key: K, value: GeneratorForm[K]) => {
     setForm((current) => ({ ...current, [key]: value }));
+    setApiPreviewWebsite(null);
   };
 
-  function handleSelectLead(leadId: string) {
+  async function syncPreviewFromGeneratedWebsite(
+    nextGeneratedWebsiteId: string,
+    leadIdForPreview: string,
+  ) {
+    const currentResponse = await fetch(`/api/generated-websites/${nextGeneratedWebsiteId}`);
+    if (!currentResponse.ok) return;
+    const currentData = (await currentResponse.json()) as {
+      currentWebsiteJson?: AgentWebsiteJson;
+    };
+    if (!currentData.currentWebsiteJson) return;
+    setApiPreviewWebsite(
+      mapAgentJsonToGeneratedWebsite({
+        payload: currentData.currentWebsiteJson,
+        generatedWebsiteId: nextGeneratedWebsiteId,
+        leadId: leadIdForPreview,
+      }),
+    );
+  }
+
+  async function handleSelectLead(leadId: string) {
     setSelectedLeadId(leadId);
     const lead = initialLeads.find((item) => item.id === leadId) ?? null;
     setForm(buildFormFromLead(lead));
     setGeneratedWebsiteId(lead?.generatedWebsiteId ?? "");
+    setApiPreviewWebsite(null);
     setActionFeedback(null);
+
+    if (lead?.generatedWebsiteId) {
+      await syncPreviewFromGeneratedWebsite(lead.generatedWebsiteId, lead.id);
+    }
   }
+
+  useEffect(() => {
+    const first = initialLeads[0];
+    if (!first?.generatedWebsiteId) return;
+    void syncPreviewFromGeneratedWebsite(first.generatedWebsiteId, first.id);
+  }, [initialLeads]);
 
   async function handleGenerateWithAI() {
     if (!selectedLead) {
@@ -342,7 +407,7 @@ export function AiGeneratorWorkbench({ initialLeads }: AiGeneratorWorkbenchProps
         error?: string;
         generatedWebsiteId?: string;
         demoSlug?: string;
-      };
+      } & Partial<AgentWebsiteJson>;
 
       if (!response.ok) {
         setActionFeedback(json.error ?? "No se pudo generar la web con IA.");
@@ -351,6 +416,23 @@ export function AiGeneratorWorkbench({ initialLeads }: AiGeneratorWorkbenchProps
 
       if (json.generatedWebsiteId) {
         setGeneratedWebsiteId(json.generatedWebsiteId);
+        if (json.businessProfile && json.website && json.seo && json.contact && json.confidence) {
+          setApiPreviewWebsite(
+            mapAgentJsonToGeneratedWebsite({
+              payload: {
+                businessProfile: json.businessProfile,
+                website: json.website,
+                seo: json.seo,
+                contact: json.contact,
+                confidence: json.confidence,
+              },
+              generatedWebsiteId: json.generatedWebsiteId,
+              leadId: selectedLead.id,
+            }),
+          );
+        } else {
+          await syncPreviewFromGeneratedWebsite(json.generatedWebsiteId, selectedLead.id);
+        }
       }
       setActionFeedback(
         json.demoSlug
@@ -390,6 +472,9 @@ export function AiGeneratorWorkbench({ initialLeads }: AiGeneratorWorkbenchProps
         return;
       }
       setActionFeedback("Demo guardada en Supabase.");
+      if (selectedLeadId) {
+        await syncPreviewFromGeneratedWebsite(generatedWebsiteId.trim(), selectedLeadId);
+      }
     } catch {
       setActionFeedback("Error inesperado al guardar la demo.");
     } finally {
@@ -492,13 +577,31 @@ export function AiGeneratorWorkbench({ initialLeads }: AiGeneratorWorkbenchProps
         }),
       });
 
-      const json = (await response.json()) as { error?: string };
+      const json = (await response.json()) as (Partial<AgentWebsiteJson> & { error?: string });
       if (!response.ok) {
         setActionFeedback(json.error ?? "No se pudo regenerar.");
         return;
       }
 
-      setActionFeedback("Regeneración enviada correctamente. Refresca para ver cambios persistidos.");
+      if (json.businessProfile && json.website && json.seo && json.contact && json.confidence) {
+        setApiPreviewWebsite(
+          mapAgentJsonToGeneratedWebsite({
+            payload: {
+              businessProfile: json.businessProfile,
+              website: json.website,
+              seo: json.seo,
+              contact: json.contact,
+              confidence: json.confidence,
+            },
+            generatedWebsiteId: generatedWebsiteId.trim(),
+            leadId: selectedLeadId || "lead_preview_dynamic",
+          }),
+        );
+      } else if (selectedLeadId) {
+        await syncPreviewFromGeneratedWebsite(generatedWebsiteId.trim(), selectedLeadId);
+      }
+
+      setActionFeedback("Regeneración aplicada y vista previa actualizada.");
     } catch {
       setActionFeedback("Error inesperado en regeneración parcial.");
     } finally {

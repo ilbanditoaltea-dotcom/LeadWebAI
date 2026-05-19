@@ -20,6 +20,7 @@ type RunResult = {
   truncatedBySafeLimit?: boolean;
   requestedLimit?: number;
   effectiveLimit?: number;
+  warning?: string;
   results: Array<{
     businessName: string;
     leadId: string | null;
@@ -54,7 +55,9 @@ export function AutopilotRunner() {
       }
       setResult(json);
       setFeedback(
-        json.truncatedBySafeLimit
+        json.warning
+          ? json.warning
+          : json.truncatedBySafeLimit
           ? `Autopilot parcial: este entorno procesa ${json.effectiveLimit}/${json.requestedLimit} por ejecución para evitar timeout.`
           : json.truncatedByTimeBudget
             ? `Autopilot parcial: ${json.pendingApprovalCount}/${json.processedCount} en pending_approval (recorta el limite para evitar timeout).`

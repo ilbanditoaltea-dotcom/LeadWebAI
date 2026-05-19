@@ -87,8 +87,12 @@ async function getAiGeneratorLeads(): Promise<AiGeneratorLeadOption[]> {
           .limit(300),
       ]);
 
-    if (leadsError || websitesError || !leadsData || leadsData.length === 0) {
+    if (leadsError || websitesError || !leadsData) {
       return mapDemoLeadToOption();
+    }
+
+    if (leadsData.length === 0) {
+      return [];
     }
 
     const latestWebsiteByLeadId = new Map<string, GeneratedWebsiteRow>();

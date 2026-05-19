@@ -38,6 +38,8 @@ const discoveredBusinessSchema = z.object({
   rating: z.number().nullable().default(null),
   reviewCount: z.number().nullable().default(null),
   googleMapsUrl: z.string().default("unknown"),
+  mapsCategory: z.string().default("unknown"),
+  mapsSnippet: z.string().default(""),
 });
 
 export const runCampaignInputSchema = z.object({
@@ -153,37 +155,113 @@ function visualStyleByType(type: BusinessType): VisualStyle {
   return "modern_minimal";
 }
 
-function fallbackDiscoveredBusinesses(input: RunCampaignInput): DiscoveredBusiness[] {
-  const seeds = [
-    "Central",
-    "Prime",
-    "Plus",
-    "Studio",
-    "Elite",
-    "Nova",
-    "Urban",
-    "Costa",
-    "Blue",
-    "Top",
-  ];
-  return Array.from({ length: input.limit }).map((_, index) =>
-    discoveredBusinessSchema.parse({
-      businessName: `${input.category} ${seeds[index % seeds.length]} ${index + 1}`,
-      city: input.city,
-      category: input.category,
-      address: `${index + 10} ${input.city} Center`,
-      phone: "unknown",
-      websiteUrl: "unknown",
-      rating: null,
-      reviewCount: null,
-      googleMapsUrl: "unknown",
-    }),
+function normalizeCandidateUrl(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === "unknown") return "unknown";
+  const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  try {
+    const url = new URL(withProtocol);
+    const host = url.hostname.toLowerCase();
+    if (!host || host.includes("google.") || host.includes("facebook.com") || host.includes("instagram.com")) {
+      return "unknown";
+    }
+    return `${url.protocol}//${url.host}${url.pathname}`.replace(/\/$/, "");
+  } catch {
+    return "unknown";
+  }
+}
+
+function looksSyntheticBusinessName(name: string, category: string) {
+  const normalizedName = slugify(name);
+  const normalizedCategory = slugify(category);
+  if (!normalizedName) return true;
+  if (/-(central|prime|plus|studio|elite|nova|urban|costa|blue|top)-\d+$/.test(normalizedName)) {
+    return true;
+  }
+  if (normalizedName === normalizedCategory || normalizedName.startsWith(`${normalizedCategory}-`)) {
+    return /\d+$/.test(normalizedName);
+  }
+  return false;
+}
+
+function isVerifiableBusinessCandidate(business: DiscoveredBusiness) {
+  const hasAddress = business.address !== "unknown" && business.address.trim().length >= 4;
+  const hasWebsite = business.websiteUrl !== "unknown";
+  const hasPhone = business.phone !== "unknown";
+  const hasMaps = business.googleMapsUrl !== "unknown";
+  const hasTrustSignals = Boolean(
+    (typeof business.rating === "number" && business.rating > 0) ||
+      (typeof business.reviewCount === "number" && business.reviewCount > 0),
   );
+  if (looksSyntheticBusinessName(business.businessName, business.category)) {
+    return false;
+  }
+  if (!hasMaps) {
+    return false;
+  }
+  // Keep quality guardrails while allowing more real-world small businesses:
+  // a candidate is valid if it has maps + (website OR phone OR trust),
+  // and either a usable address or enough trust/phone data.
+  const hasCoreSignal = hasWebsite || hasPhone || hasTrustSignals;
+  const hasContextSignal = hasAddress || hasPhone || hasTrustSignals;
+  return hasCoreSignal && hasContextSignal;
+}
+
+function buildGoogleMapsUrl(params: { cid?: string; title?: string; address?: string; city?: string }) {
+  if (params.cid) {
+    return `https://www.google.com/maps?cid=${params.cid}`;
+  }
+  const query = [params.title, params.address, params.city]
+    .filter((item) => typeof item === "string" && item.trim().length > 0)
+    .join(" ");
+  if (!query) return "unknown";
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+}
+
+function candidateQualityScore(business: DiscoveredBusiness) {
+  let score = 0;
+  if (business.googleMapsUrl !== "unknown") score += 40;
+  if (business.phone !== "unknown") score += 20;
+  if (business.websiteUrl !== "unknown") score += 20;
+  if (business.address !== "unknown") score += 10;
+  if (typeof business.reviewCount === "number" && business.reviewCount > 0) score += 10;
+  return score;
+}
+
+function buildGoogleMapsResearchSummary(business: DiscoveredBusiness) {
+  const facts: string[] = [];
+  facts.push(`Business: ${business.businessName}`);
+  facts.push(`Category: ${business.category}`);
+  facts.push(`City: ${business.city}`);
+  facts.push(`Address: ${business.address}`);
+  facts.push(`Phone: ${business.phone}`);
+  facts.push(`Website: ${business.websiteUrl}`);
+  facts.push(`Google Maps URL: ${business.googleMapsUrl}`);
+  if (business.mapsCategory && business.mapsCategory !== "unknown") {
+    facts.push(`Google Maps category: ${business.mapsCategory}`);
+  }
+  if (typeof business.rating === "number") {
+    facts.push(`Rating: ${business.rating.toFixed(1)}/5`);
+  }
+  if (typeof business.reviewCount === "number") {
+    facts.push(`Reviews: ${business.reviewCount}`);
+  }
+  if (business.mapsSnippet.trim().length > 0) {
+    facts.push(`Maps snippet: ${business.mapsSnippet.trim()}`);
+  }
+
+  if (business.websiteUrl === "unknown") {
+    facts.push(
+      "No website detected. Focus proposal on Google Maps conversion, click-to-call, WhatsApp/contact, and simple booking capture.",
+    );
+  }
+
+  return facts.join("\n");
 }
 
 async function discoverBusinesses(input: RunCampaignInput): Promise<DiscoveredBusiness[]> {
   if (!serperApiKey) {
-    return fallbackDiscoveredBusinesses(input);
+    return [];
   }
 
   try {
@@ -206,7 +284,7 @@ async function discoverBusinesses(input: RunCampaignInput): Promise<DiscoveredBu
     );
 
     if (!response.ok) {
-      return fallbackDiscoveredBusinesses(input);
+      return [];
     }
 
     const json = (await response.json()) as {
@@ -218,6 +296,9 @@ async function discoverBusinesses(input: RunCampaignInput): Promise<DiscoveredBu
         rating?: number;
         ratingCount?: number;
         cid?: string;
+        type?: string;
+        category?: string;
+        description?: string;
       }>;
     };
 
@@ -230,22 +311,42 @@ async function discoverBusinesses(input: RunCampaignInput): Promise<DiscoveredBu
           category: input.category,
           address: place.address ?? "unknown",
           phone: place.phoneNumber ?? "unknown",
-          websiteUrl: place.website ?? "unknown",
+          websiteUrl: normalizeCandidateUrl(place.website ?? "unknown"),
           rating: typeof place.rating === "number" ? place.rating : null,
           reviewCount: typeof place.ratingCount === "number" ? place.ratingCount : null,
-          googleMapsUrl: place.cid ? `https://www.google.com/maps?cid=${place.cid}` : "unknown",
+          googleMapsUrl: buildGoogleMapsUrl({
+            cid: place.cid,
+            title: place.title,
+            address: place.address,
+            city: input.city,
+          }),
+          mapsCategory: place.type ?? place.category ?? "unknown",
+          mapsSnippet: place.description ?? "",
         }),
       )
       .filter((item) => item.success)
-      .map((item) => item.data);
+      .map((item) => item.data)
+      .filter((item) => isVerifiableBusinessCandidate(item));
 
-    if (places.length === 0) {
-      return fallbackDiscoveredBusinesses(input);
+    const deduped = Array.from(
+      new Map(
+        places.map((item) => [
+          `${slugify(item.businessName)}|${slugify(item.address)}|${slugify(item.phone)}`,
+          item,
+        ]),
+      ).values(),
+    );
+    const ranked = deduped
+      .sort((a, b) => candidateQualityScore(b) - candidateQualityScore(a))
+      .slice(0, input.limit);
+
+    if (ranked.length === 0) {
+      return [];
     }
 
-    return places;
+    return ranked;
   } catch {
-    return fallbackDiscoveredBusinesses(input);
+    return [];
   }
 }
 
@@ -789,6 +890,28 @@ export async function runAutopilotCampaign(input: RunCampaignInput) {
   const parsedInput = runCampaignInputSchema.parse(input);
   const supabase = await createSupabaseServerClient();
   const discoveredAll = await discoverBusinesses(parsedInput);
+  if (discoveredAll.length === 0) {
+    return {
+      campaign: {
+        id: null,
+        name: `Autopilot ${parsedInput.category} ${parsedInput.city}`,
+        city: parsedInput.city,
+        category: parsedInput.category,
+      },
+      discoveredCount: 0,
+      processedCount: 0,
+      pendingApprovalCount: 0,
+      failedCount: 0,
+      mode: hasUsableOpenAiKey() ? "live_ai" : "fallback_no_openai_key",
+      truncatedByTimeBudget: false,
+      truncatedBySafeLimit: false,
+      requestedLimit: parsedInput.limit,
+      effectiveLimit: 0,
+      results: [],
+      warning:
+        "No se encontraron negocios verificables. Revisa SERPER_API_KEY o prueba otra ciudad/categoria.",
+    };
+  }
   const maxLeadsPerRun = hasUsableOpenAiKey() ? 1 : 5;
   const discovered = discoveredAll.slice(0, Math.min(parsedInput.limit, maxLeadsPerRun));
   const startedAt = Date.now();
@@ -871,14 +994,17 @@ export async function runAutopilotCampaign(input: RunCampaignInput) {
       });
 
       const crawl = await crawlWebsite(business.websiteUrl);
+      const mapsResearch = buildGoogleMapsResearchSummary(business);
+      const researchSummary = `${mapsResearch}\n\n[Website crawl]\n${crawl.summary}`;
+      const researchRawContent = `${mapsResearch}\n\n${crawl.rawContent}`;
       const websiteIntel = await extractWebsiteIntelligence({
         websiteUrl: business.websiteUrl,
         businessName: business.businessName,
         category: business.category,
         city: business.city,
-        fallbackText: `${crawl.summary}\n${crawl.rawContent}`,
+        fallbackText: `${researchSummary}\n${researchRawContent}`,
       });
-      const analysis = await analyzeBusinessWithAI(business, lead.id, crawl.summary);
+      const analysis = await analyzeBusinessWithAI(business, lead.id, researchSummary);
 
       await supabase
         .from("leads")
@@ -889,7 +1015,7 @@ export async function runAutopilotCampaign(input: RunCampaignInput) {
           detected_problems: safeJson(analysis.detectedProblems),
           recommendations: safeJson(analysis.recommendations),
           main_problem_detected: analysis.detectedProblems[0] ?? "unknown",
-          description: `${lead.description ?? ""}\n\n[Autopilot crawl]\n${crawl.summary.slice(0, 500)}`,
+          description: `${lead.description ?? ""}\n\n[Google Maps]\n${mapsResearch.slice(0, 700)}\n\n[Autopilot crawl]\n${crawl.summary.slice(0, 500)}`,
         })
         .eq("id", lead.id);
 
