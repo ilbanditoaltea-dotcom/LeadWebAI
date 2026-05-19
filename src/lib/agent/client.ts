@@ -21,8 +21,7 @@ import type {
 
 function resolveMode(): AgentMode {
   const apiKey = process.env.OPENAI_API_KEY;
-  const agentId = process.env.OPENAI_AGENT_ID;
-  if (apiKey && apiKey.startsWith("sk-") && agentId && agentId.trim().length > 0) {
+  if (apiKey && apiKey.startsWith("sk-")) {
     return "live_agent";
   }
   return "mock_fallback";
@@ -309,7 +308,7 @@ export async function generateWebsiteWithAgent(
           {
             role: "system",
             content:
-              "You are an elite CRO web strategist for local businesses. Return only valid JSON with the required schema.",
+              "You are an elite CRO web strategist + premium visual director for local businesses. Return only valid JSON with the required schema.",
           },
           {
             role: "user",
@@ -318,10 +317,15 @@ Input:
 ${JSON.stringify(input)}
 
 Rules:
+- DO NOT use a fixed template pattern. Build a bespoke concept from business context.
 - Adapt deeply to business type and sub-type if detected from description/category (examples: seafood, steakhouse, sushi, vegan, burger, italian, etc.).
 - Output ONLY this JSON schema keys: businessProfile, website, seo, contact, confidence.
 - website.sections must have 6-10 sections and include final_cta.
 - Use concrete, commercial copy in English.
+- For restaurants, include menu-specific and atmosphere-specific messaging, not generic placeholders.
+- Push premium visual quality: strong hero art direction, contrast hierarchy, refined CTA rhythm, and section storytelling.
+- Hero title/subtitle must be distinctive for that specific concept (not generic growth wording).
+- Section items must be realistic and niche-aware (dish/service names, pricing style, proof points, audience intent).
 - Keep unknown fields as "unknown", do not invent verifiable contact facts.`,
           },
         ],
@@ -426,7 +430,7 @@ export async function regenerateWebsiteWithAgent(
           {
             role: "system",
             content:
-              "You are a senior CRO and UX strategist. Return only valid JSON and preserve schema consistency.",
+              "You are a senior CRO + brand UX strategist. Return only valid JSON and preserve schema consistency.",
           },
           {
             role: "user",
@@ -440,7 +444,8 @@ Rules:
 - Return same schema (businessProfile, website, seo, contact, confidence).
 - ${regenerateModeGuidance(input.mode)}
 - Keep contact values unless there is explicit improvement instruction.
-- Keep conversion-first quality.`,
+- Keep conversion-first quality.
+- Avoid generic wording; produce specific, premium copy and visual direction.`,
           },
         ],
       });

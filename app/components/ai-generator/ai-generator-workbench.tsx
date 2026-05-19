@@ -417,6 +417,7 @@ export function AiGeneratorWorkbench({ initialLeads }: AiGeneratorWorkbenchProps
         error?: string;
         generatedWebsiteId?: string;
         demoSlug?: string;
+        mode?: "live_agent" | "mock_fallback";
       } & Partial<AgentWebsiteJson>;
 
       if (!response.ok) {
@@ -445,9 +446,11 @@ export function AiGeneratorWorkbench({ initialLeads }: AiGeneratorWorkbenchProps
         }
       }
       setActionFeedback(
-        json.demoSlug
-          ? `Demo generada correctamente. URL: /demo/${json.demoSlug}`
-          : "Demo generada correctamente.",
+        json.mode === "mock_fallback"
+          ? "Demo generada en modo mock_fallback (resultado básico). Revisa OPENAI_API_KEY para calidad premium."
+          : json.demoSlug
+            ? `Demo generada correctamente con IA. URL: /demo/${json.demoSlug}`
+            : "Demo generada correctamente con IA.",
       );
     } catch {
       setActionFeedback("Error inesperado al generar la demo con IA.");
@@ -587,7 +590,10 @@ export function AiGeneratorWorkbench({ initialLeads }: AiGeneratorWorkbenchProps
         }),
       });
 
-      const json = (await response.json()) as (Partial<AgentWebsiteJson> & { error?: string });
+      const json = (await response.json()) as (Partial<AgentWebsiteJson> & {
+        error?: string;
+        mode?: "live_agent" | "mock_fallback";
+      });
       if (!response.ok) {
         setActionFeedback(json.error ?? "No se pudo regenerar.");
         return;
@@ -611,7 +617,11 @@ export function AiGeneratorWorkbench({ initialLeads }: AiGeneratorWorkbenchProps
         await syncPreviewFromGeneratedWebsite(generatedWebsiteId.trim(), selectedLeadId);
       }
 
-      setActionFeedback("Regeneración aplicada y vista previa actualizada.");
+      setActionFeedback(
+        json.mode === "mock_fallback"
+          ? "Regeneración aplicada en modo mock_fallback (cambios limitados)."
+          : "Regeneración aplicada con IA y vista previa actualizada.",
+      );
     } catch {
       setActionFeedback("Error inesperado en regeneración parcial.");
     } finally {
@@ -899,9 +909,14 @@ export function AiGeneratorWorkbench({ initialLeads }: AiGeneratorWorkbenchProps
         <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
           <div className="mb-4 flex items-center justify-between">
             <h3 className="text-base font-semibold text-slate-900">Vista previa dinamica</h3>
-            <span className="rounded-full bg-violet-100 px-3 py-1 text-xs font-semibold text-violet-700">
-              Template activo: {previewWebsite.id}
-            </span>
+            <div className="text-right">
+              <span className="rounded-full bg-violet-100 px-3 py-1 text-xs font-semibold text-violet-700">
+                {apiPreviewWebsite ? "Demo IA activa" : "Preview previa a generar"}
+              </span>
+              {generatedWebsiteId.trim() ? (
+                <p className="mt-1 text-[11px] text-slate-500">ID: {generatedWebsiteId.trim()}</p>
+              ) : null}
+            </div>
           </div>
           <div className={`mx-auto overflow-hidden rounded-2xl border border-slate-200 bg-white ${mobilePreview ? "max-w-[390px]" : "max-w-none"}`}>
             <WebsiteRenderer data={previewWebsite} />
