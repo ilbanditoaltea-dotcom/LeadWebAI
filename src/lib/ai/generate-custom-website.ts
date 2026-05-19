@@ -4,31 +4,7 @@ import {
   VISUAL_STYLES,
   WEBSITE_GOALS,
 } from "@/src/lib/types/ai-website";
-
-const sectionTypes = [
-  "services",
-  "menu",
-  "booking",
-  "contact",
-  "reviews",
-  "gallery",
-  "faq",
-  "catalog",
-  "properties",
-  "before_after",
-  "team",
-  "location",
-  "pricing",
-  "offers",
-  "process",
-  "trust_badges",
-  "final_cta",
-  "instagram",
-  "opening_hours",
-  "story",
-  "featured_products",
-  "lead_capture_form",
-] as const;
+import { businessIntelligenceProfileSchema } from "@/src/lib/research/business-profile";
 
 export const generateCustomWebsiteInputSchema = z.object({
   leadId: z.string().min(1),
@@ -46,6 +22,11 @@ export const generateCustomWebsiteInputSchema = z.object({
   targetGoal: z.enum(WEBSITE_GOALS),
 });
 
+export const generateCustomWebsiteFromBipInputSchema = z.object({
+  leadId: z.string().min(1),
+  businessProfile: businessIntelligenceProfileSchema,
+});
+
 const colorPaletteSchema = z.object({
   primary: z.string(),
   secondary: z.string(),
@@ -55,7 +36,7 @@ const colorPaletteSchema = z.object({
 });
 
 const sectionSchema = z.object({
-  type: z.enum(sectionTypes),
+  type: z.string().min(1),
   variant: z.string(),
   title: z.string(),
   subtitle: z.string(),

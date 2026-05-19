@@ -91,7 +91,7 @@ function normalizeSections(
     .sort((a, b) => a.order - b.order)
     .slice(0, 10);
 
-  while (sorted.length < 5) {
+  while (sorted.length < 6) {
     const fallback = fallbackSections[sorted.length % fallbackSections.length];
     sorted.push({
       ...fallback,

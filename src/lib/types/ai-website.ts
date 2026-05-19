@@ -30,9 +30,17 @@ export const WEBSITE_GOALS = [
 export type WebsiteGoal = (typeof WEBSITE_GOALS)[number];
 
 export const VISUAL_STYLES = [
+  "warm_restaurant",
+  "rustic_mediterranean",
   "premium_dark",
   "clean_medical",
-  "warm_restaurant",
+  "vintage_barbershop",
+  "luxury_real_estate",
+  "playful_academy",
+  "natural_wellness",
+  "urban_fitness",
+  "industrial_automotive",
+  "boutique_hotel",
   "modern_minimal",
   "luxury",
   "playful",
@@ -111,7 +119,7 @@ export interface WebsiteHero {
 }
 
 export interface WebsiteSection {
-  type: SectionType;
+  type: SectionType | string;
   variant: string;
   title: string;
   subtitle: string;

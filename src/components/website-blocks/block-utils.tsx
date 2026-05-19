@@ -1,9 +1,11 @@
 import type { ReactNode } from "react";
 import type { JsonValue, WebsiteColorPalette, WebsiteSection } from "@/src/lib/types/ai-website";
+import type { ResolvedWebsiteDesign } from "@/src/lib/website/design-system";
 
 export type BlockProps = {
   section: WebsiteSection;
   palette: WebsiteColorPalette;
+  design?: ResolvedWebsiteDesign;
 };
 
 type BlockContainerProps = {
@@ -13,6 +15,7 @@ type BlockContainerProps = {
   variant?: string;
   children: ReactNode;
   cta?: string;
+  design?: ResolvedWebsiteDesign;
 };
 
 function resolveVariantClasses(variant?: string) {
@@ -42,10 +45,27 @@ export function BlockContainer({
   variant,
   children,
   cta,
+  design,
 }: BlockContainerProps) {
+  const ctaClassByStyle =
+    design?.ctaStyle === "outline"
+      ? "border bg-transparent"
+      : design?.ctaStyle === "gradient"
+        ? "text-white"
+        : design?.ctaStyle === "elevated"
+          ? "text-white shadow-lg"
+          : "text-white";
+
+  const ctaStyle =
+    design?.ctaStyle === "outline"
+      ? { borderColor: `${palette.primary}66`, color: palette.primary }
+      : design?.ctaStyle === "gradient"
+        ? { background: `linear-gradient(90deg, ${palette.primary}, ${palette.accent})` }
+        : { backgroundColor: palette.primary };
+
   return (
     <section
-      className={`rounded-3xl border p-6 shadow-sm md:p-8 ${resolveVariantClasses(variant)}`}
+      className={`${design?.radiusClass ?? "rounded-3xl"} border p-6 ${design?.shadowClass ?? "shadow-sm"} md:p-8 ${resolveVariantClasses(variant)}`}
       style={{ borderColor: `${palette.primary}22` }}
     >
       <header className="mb-5">
@@ -56,8 +76,8 @@ export function BlockContainer({
       {cta ? (
         <button
           type="button"
-          className="mt-6 rounded-xl px-4 py-2 text-sm font-semibold text-white"
-          style={{ backgroundColor: palette.primary }}
+          className={`mt-6 rounded-xl px-4 py-2 text-sm font-semibold ${ctaClassByStyle}`}
+          style={ctaStyle}
         >
           {cta}
         </button>

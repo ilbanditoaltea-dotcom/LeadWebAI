@@ -7,6 +7,7 @@ import {
   type NormalizedGeneratedWebsite,
   type NormalizedWebsiteSection,
 } from "@/src/lib/website/normalize-generated-website";
+import { resolveWebsiteDesign } from "@/src/lib/website/design-system";
 import { BeforeAfterBlock } from "./BeforeAfterBlock";
 import { BookingBlock } from "./BookingBlock";
 import { CatalogBlock } from "./CatalogBlock";
@@ -35,23 +36,27 @@ type WebsiteRendererProps = {
   data: GeneratedWebsite;
 };
 
-function renderSection(section: NormalizedWebsiteSection, data: NormalizedGeneratedWebsite) {
+function renderSection(
+  section: NormalizedWebsiteSection,
+  data: NormalizedGeneratedWebsite,
+  design: ReturnType<typeof resolveWebsiteDesign>,
+) {
   const palette = data.businessProfile.colorPalette;
   const typedSection = section as unknown as WebsiteSection;
 
   switch (section.type) {
     case "services":
-      return <ServicesBlock section={typedSection} palette={palette} />;
+      return <ServicesBlock section={typedSection} palette={palette} design={design} />;
     case "menu":
-      return <MenuBlock section={typedSection} palette={palette} />;
+      return <MenuBlock section={typedSection} palette={palette} design={design} />;
     case "booking":
-      return <BookingBlock section={typedSection} palette={palette} />;
+      return <BookingBlock section={typedSection} palette={palette} design={design} />;
     case "contact":
       return <ContactBlock section={typedSection} palette={palette} contact={data.website.contact} />;
     case "reviews":
-      return <ReviewsBlock section={typedSection} palette={palette} />;
+      return <ReviewsBlock section={typedSection} palette={palette} design={design} />;
     case "gallery":
-      return <GalleryBlock section={typedSection} palette={palette} />;
+      return <GalleryBlock section={typedSection} palette={palette} design={design} />;
     case "faq":
       return <FAQBlock section={typedSection} palette={palette} />;
     case "catalog":
@@ -91,15 +96,59 @@ function renderSection(section: NormalizedWebsiteSection, data: NormalizedGenera
 
 export function WebsiteRenderer({ data }: WebsiteRendererProps) {
   const normalized = normalizeGeneratedWebsite(data);
+  const design = resolveWebsiteDesign(normalized);
   const palette = normalized.businessProfile.colorPalette;
-  const orderedSections = [...normalized.website.sections].sort((a, b) => a.order - b.order);
+  const visualStyle = normalized.businessProfile.visualStyle;
+  const isDarkStyle = ["premium_dark", "vintage", "industrial", "vintage_barbershop", "industrial_automotive"].includes(visualStyle);
+  const sectionWrapperClass =
+    visualStyle === "mediterranean" || visualStyle === "warm_restaurant" || visualStyle === "rustic_mediterranean"
+      ? "space-y-8"
+      : visualStyle === "clean_medical"
+        ? "space-y-5"
+        : visualStyle === "urban" || visualStyle === "urban_fitness"
+          ? "space-y-7"
+          : "space-y-6";
+  const orderedSections = [...normalized.website.sections]
+    .sort((a, b) => a.order - b.order)
+    .map((section, index) => ({
+      ...section,
+      variant: design.sectionVariantByIndex[index] ?? section.variant,
+    }));
+
+  const normalizedWithVariants: NormalizedGeneratedWebsite = {
+    ...normalized,
+    website: {
+      ...normalized.website,
+      hero: {
+        ...normalized.website.hero,
+        variant: design.heroVariant,
+      },
+      sections: orderedSections,
+      confidence: {
+        ...normalized.website.confidence,
+        reasoning: normalized.website.confidence.reasoning.includes("style")
+          ? normalized.website.confidence.reasoning
+          : `${normalized.website.confidence.reasoning} | Style: ${design.style}. Reason: ${design.config.layoutPersonality}`,
+      },
+    },
+  };
 
   return (
-    <div className="min-h-screen w-full" style={{ backgroundColor: palette.background, color: palette.text }}>
-      <main className="mx-auto w-full max-w-6xl space-y-6 px-4 py-6 md:px-8 md:py-10">
-        <HeroBlock website={normalized} />
+    <div
+      className="min-h-screen w-full"
+      style={{
+        background: isDarkStyle
+          ? `linear-gradient(180deg, ${palette.background}, ${palette.primary}12)`
+          : `linear-gradient(180deg, ${palette.background}, ${palette.secondary}10)`,
+        color: palette.text,
+      }}
+    >
+      <main className={`mx-auto w-full max-w-6xl px-4 py-6 md:px-8 md:py-10 ${sectionWrapperClass}`}>
+        <HeroBlock website={normalizedWithVariants} />
         {orderedSections.map((section, index) => (
-          <div key={`${section.type}-${section.order}-${index}`}>{renderSection(section, normalized)}</div>
+          <div key={`${section.type}-${section.order}-${index}`}>
+            {renderSection(section, normalizedWithVariants, design)}
+          </div>
         ))}
       </main>
       <footer className="border-t px-4 py-8 md:px-8" style={{ borderColor: `${palette.primary}33` }}>
