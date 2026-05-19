@@ -3,6 +3,7 @@ import type { Json } from "@/src/lib/supabase/database.types";
 import type {
   AgentAnalyzeBusinessOutput,
   AgentGenerateMessageOutput,
+  AgentGenerateWebsiteInput,
   AgentGenerateWebsiteOutput,
   AgentRegenerateWebsiteOutput,
 } from "@/src/lib/agent/types";
@@ -27,6 +28,54 @@ async function buildUniqueDemoSlug(baseName: string) {
     .ilike("demo_slug", `${baseSlug}%`);
   if (!data || data.length === 0) return baseSlug;
   return `${baseSlug}-${Date.now().toString(36).slice(-4)}`;
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value,
+  );
+}
+
+export async function ensureLeadForWebsiteGeneration(
+  input: AgentGenerateWebsiteInput,
+): Promise<string> {
+  const supabase = await createSupabaseServerClient();
+
+  if (isUuid(input.leadId)) {
+    const { data, error } = await supabase
+      .from("leads")
+      .select("id")
+      .eq("id", input.leadId)
+      .maybeSingle();
+    if (!error && data?.id) {
+      return data.id;
+    }
+  }
+
+  const { data: inserted, error: insertError } = await supabase
+    .from("leads")
+    .insert({
+      business_name: input.businessName,
+      category: input.category ?? "generic",
+      city: input.city ?? "unknown",
+      description: input.description ?? "Lead created from AI generator.",
+      address: input.address ?? "unknown",
+      phone: input.phone ?? "unknown",
+      email: input.email ?? "unknown",
+      whatsapp: input.whatsapp ?? "unknown",
+      website_url: input.websiteUrl ?? "unknown",
+      status: "analyzed",
+      detected_problems: (input.detectedProblems ?? []) as unknown as Json,
+      recommendations: (input.recommendations ?? []) as unknown as Json,
+    })
+    .select("id")
+    .maybeSingle();
+
+  if (insertError || !inserted?.id) {
+    throw new Error(insertError?.message ?? "Failed to create lead for website generation");
+  }
+
+  return inserted.id;
 }
 
 export async function getLeadById(leadId: string) {

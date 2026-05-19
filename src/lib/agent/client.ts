@@ -1,5 +1,9 @@
+import OpenAI from "openai";
 import { applyChannelLengthRules } from "@/src/lib/ai/generate-sales-message";
-import type { GenerateCustomWebsiteOutput } from "@/src/lib/ai/generate-custom-website";
+import {
+  generateCustomWebsiteOutputSchema,
+  type GenerateCustomWebsiteOutput,
+} from "@/src/lib/ai/generate-custom-website";
 import { generatedWebsiteMocksById } from "@/src/lib/types/ai-website";
 import type {
   AgentAnalyzeBusinessInput,
@@ -22,6 +26,14 @@ function resolveMode(): AgentMode {
     return "live_agent";
   }
   return "mock_fallback";
+}
+
+function getOpenAiClient() {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey || !apiKey.startsWith("sk-")) {
+    throw new Error("OPENAI_API_KEY missing or invalid.");
+  }
+  return new OpenAI({ apiKey });
 }
 
 function normalizeBusinessType(category: string) {
@@ -231,6 +243,19 @@ function normalizeSectionsForAgentWebsite(
     })) as GenerateCustomWebsiteOutput["website"]["sections"];
 }
 
+function regenerateModeGuidance(mode: AgentRegenerateWebsiteInput["mode"]) {
+  if (mode === "style") {
+    return "Focus on visual style, palette, tone and aesthetic direction. Keep conversion intent.";
+  }
+  if (mode === "copy") {
+    return "Focus on copywriting improvements: hero, section copy, CTAs, SEO and salesAngle.";
+  }
+  if (mode === "sections") {
+    return "Focus on section architecture and ordering. Keep 6-10 sections and include final_cta.";
+  }
+  return "Focus only on hero (title, subtitle, eyebrow, CTA, image prompt).";
+}
+
 export async function analyzeBusinessWithAgent(
   input: AgentAnalyzeBusinessInput,
 ): Promise<AgentAnalyzeBusinessOutput> {
@@ -273,6 +298,47 @@ export async function generateWebsiteWithAgent(
   input: AgentGenerateWebsiteInput,
 ): Promise<AgentGenerateWebsiteOutput> {
   const mode = resolveMode();
+  if (mode === "live_agent") {
+    try {
+      const openai = getOpenAiClient();
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4.1-mini",
+        temperature: 0.45,
+        response_format: { type: "json_object" },
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are an elite CRO web strategist for local businesses. Return only valid JSON with the required schema.",
+          },
+          {
+            role: "user",
+            content: `Generate a highly specific website blueprint.
+Input:
+${JSON.stringify(input)}
+
+Rules:
+- Adapt deeply to business type and sub-type if detected from description/category (examples: seafood, steakhouse, sushi, vegan, burger, italian, etc.).
+- Output ONLY this JSON schema keys: businessProfile, website, seo, contact, confidence.
+- website.sections must have 6-10 sections and include final_cta.
+- Use concrete, commercial copy in English.
+- Keep unknown fields as "unknown", do not invent verifiable contact facts.`,
+          },
+        ],
+      });
+
+      const raw = completion.choices[0]?.message?.content;
+      if (raw) {
+        const parsed = generateCustomWebsiteOutputSchema.safeParse(JSON.parse(raw));
+        if (parsed.success) {
+          return { ...parsed.data, mode };
+        }
+      }
+    } catch {
+      // Fallback to deterministic mock branch below.
+    }
+  }
+
   const base = templateForCategory(input.category ?? "generic");
   const businessType = normalizeBusinessType(input.category ?? "generic");
   const concept = businessType === "restaurant" ? inferRestaurantConcept(input) : null;
@@ -349,6 +415,48 @@ export async function regenerateWebsiteWithAgent(
 ): Promise<AgentRegenerateWebsiteOutput> {
   const mode = resolveMode();
   const current = input.currentWebsiteJson;
+  if (mode === "live_agent") {
+    try {
+      const openai = getOpenAiClient();
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4.1-mini",
+        temperature: 0.4,
+        response_format: { type: "json_object" },
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a senior CRO and UX strategist. Return only valid JSON and preserve schema consistency.",
+          },
+          {
+            role: "user",
+            content: `Regenerate website JSON.
+Mode: ${input.mode}
+Instruction: ${input.instruction}
+Current:
+${JSON.stringify(input.currentWebsiteJson)}
+
+Rules:
+- Return same schema (businessProfile, website, seo, contact, confidence).
+- ${regenerateModeGuidance(input.mode)}
+- Keep contact values unless there is explicit improvement instruction.
+- Keep conversion-first quality.`,
+          },
+        ],
+      });
+
+      const raw = completion.choices[0]?.message?.content;
+      if (raw) {
+        const parsed = generateCustomWebsiteOutputSchema.safeParse(JSON.parse(raw));
+        if (parsed.success) {
+          return { ...parsed.data, mode };
+        }
+      }
+    } catch {
+      // Fall through to deterministic fallback.
+    }
+  }
+
   if (input.mode === "style") {
     const styleShift = input.instruction.toLowerCase();
     const nextPalette = styleShift.includes("premium")

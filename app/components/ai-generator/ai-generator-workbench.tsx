@@ -68,7 +68,15 @@ const categoryLabels: Record<(typeof categories)[number], string> = {
 type GeneratorForm = {
   businessName: string;
   category: string;
-  restaurantSubtype: "italian" | "mediterranean" | "sushi" | "burger" | "vegan" | "fine_dining";
+  restaurantSubtype:
+    | "italian"
+    | "mediterranean"
+    | "seafood"
+    | "steakhouse"
+    | "sushi"
+    | "burger"
+    | "vegan"
+    | "fine_dining";
   city: string;
   description: string;
   currentWebsite: string;
@@ -193,6 +201,8 @@ const restaurantStyleBySubtype: Record<
 > = {
   italian: { visualStyle: "mediterranean", toneHint: "tradicion italiana, calido y familiar" },
   mediterranean: { visualStyle: "warm_restaurant", toneHint: "fresco mediterraneo, luminoso y natural" },
+  seafood: { visualStyle: "mediterranean", toneHint: "marino premium, producto fresco y reservas" },
+  steakhouse: { visualStyle: "premium_dark", toneHint: "parrilla premium, contundente y elegante" },
   sushi: { visualStyle: "modern_minimal", toneHint: "minimal japones, limpio y premium" },
   burger: { visualStyle: "urban", toneHint: "urbano, directo y joven" },
   vegan: { visualStyle: "natural", toneHint: "natural, eco y cercano" },
@@ -806,6 +816,8 @@ export function AiGeneratorWorkbench({ initialLeads }: AiGeneratorWorkbenchProps
                 >
                   <option value="italian">Italiano</option>
                   <option value="mediterranean">Mediterraneo</option>
+                  <option value="seafood">Marisqueria / Pescado</option>
+                  <option value="steakhouse">Parrilla / Carne</option>
                   <option value="sushi">Sushi</option>
                   <option value="burger">Burger</option>
                   <option value="vegan">Vegano</option>
