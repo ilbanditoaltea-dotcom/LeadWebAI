@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { hasValidSupabaseEnv } from "@/src/lib/supabase/env";
-import { createSupabaseServerClient } from "@/src/lib/supabase/server";
 import type { Database } from "@/src/lib/supabase/database.types";
 
 const clearSchema = z.object({
@@ -15,13 +14,15 @@ async function getSupabaseForDangerZone() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-  if (supabaseUrl && serviceRoleKey) {
-    return createClient<Database>(supabaseUrl, serviceRoleKey, {
-      auth: { persistSession: false },
-    });
+  if (!supabaseUrl || !serviceRoleKey) {
+    throw new Error(
+      "Falta SUPABASE_SERVICE_ROLE_KEY para limpieza completa. Configúrala en local/Vercel.",
+    );
   }
 
-  return createSupabaseServerClient();
+  return createClient<Database>(supabaseUrl, serviceRoleKey, {
+    auth: { persistSession: false },
+  });
 }
 
 export async function POST(request: Request) {

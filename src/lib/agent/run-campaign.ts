@@ -53,11 +53,17 @@ export type RunCampaignInput = z.infer<typeof runCampaignInputSchema>;
 
 type DiscoveredBusiness = z.infer<typeof discoveredBusinessSchema>;
 type LeadInsert = Database["public"]["Tables"]["leads"]["Insert"];
+type DiscoveryResult = {
+  businesses: DiscoveredBusiness[];
+  warning?: string;
+};
 
 const openAiApiKey = process.env.OPENAI_API_KEY;
 const serperApiKey = process.env.SERPER_API_KEY;
 const firecrawlApiKey = process.env.FIRECRAWL_API_KEY;
 const scrapingBeeApiKey = process.env.SCRAPINGBEE_API_KEY;
+const discoveryProvider = (process.env.DISCOVERY_PROVIDER ?? "hybrid").toLowerCase();
+const googleMapsScraperUrl = process.env.GOOGLE_MAPS_SCRAPER_URL;
 
 const CAMPAIGN_SAFE_BUDGET_MS = 50_000;
 const DISCOVERY_TIMEOUT_MS = 8_000;
@@ -259,9 +265,24 @@ function buildGoogleMapsResearchSummary(business: DiscoveredBusiness) {
   return facts.join("\n");
 }
 
-async function discoverBusinesses(input: RunCampaignInput): Promise<DiscoveredBusiness[]> {
+function rankAndFilterCandidates(items: DiscoveredBusiness[], limit: number): DiscoveredBusiness[] {
+  const filtered = items.filter((item) => isVerifiableBusinessCandidate(item));
+  const deduped = Array.from(
+    new Map(
+      filtered.map((item) => [
+        `${slugify(item.businessName)}|${slugify(item.address)}|${slugify(item.phone)}`,
+        item,
+      ]),
+    ).values(),
+  );
+  return deduped
+    .sort((a, b) => candidateQualityScore(b) - candidateQualityScore(a))
+    .slice(0, limit);
+}
+
+async function discoverBusinessesWithSerper(input: RunCampaignInput): Promise<DiscoveryResult> {
   if (!serperApiKey) {
-    return [];
+    return { businesses: [], warning: "SERPER_API_KEY no configurada." };
   }
 
   try {
@@ -284,7 +305,13 @@ async function discoverBusinesses(input: RunCampaignInput): Promise<DiscoveredBu
     );
 
     if (!response.ok) {
-      return [];
+      return {
+        businesses: [],
+        warning:
+          response.status === 403
+            ? "SERPER_API_KEY inválida o sin permisos (403 Unauthorized)."
+            : `Serper Places devolvió ${response.status}.`,
+      };
     }
 
     const json = (await response.json()) as {
@@ -325,29 +352,145 @@ async function discoverBusinesses(input: RunCampaignInput): Promise<DiscoveredBu
         }),
       )
       .filter((item) => item.success)
-      .map((item) => item.data)
-      .filter((item) => isVerifiableBusinessCandidate(item));
+      .map((item) => item.data);
 
-    const deduped = Array.from(
-      new Map(
-        places.map((item) => [
-          `${slugify(item.businessName)}|${slugify(item.address)}|${slugify(item.phone)}`,
-          item,
-        ]),
-      ).values(),
-    );
-    const ranked = deduped
-      .sort((a, b) => candidateQualityScore(b) - candidateQualityScore(a))
-      .slice(0, input.limit);
+    const ranked = rankAndFilterCandidates(places, input.limit);
 
     if (ranked.length === 0) {
-      return [];
+      return {
+        businesses: [],
+        warning:
+          "Serper respondió pero no devolvió negocios útiles para esa búsqueda. Prueba otra ciudad/categoría o aumenta límite.",
+      };
     }
 
-    return ranked;
+    return { businesses: ranked };
   } catch {
-    return [];
+    return {
+      businesses: [],
+      warning: "Fallo de red consultando Serper. Reintenta en unos segundos.",
+    };
   }
+}
+
+async function discoverBusinessesWithExternalScraper(
+  input: RunCampaignInput,
+): Promise<DiscoveryResult> {
+  if (!googleMapsScraperUrl) {
+    return {
+      businesses: [],
+      warning:
+        "GOOGLE_MAPS_SCRAPER_URL no configurada para usar scraper externo de Google Maps.",
+    };
+  }
+
+  try {
+    const response = await fetchWithTimeout(
+      googleMapsScraperUrl,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          city: input.city,
+          category: input.category,
+          limit: input.limit,
+          query: `${input.category} in ${input.city}`,
+        }),
+      },
+      DISCOVERY_TIMEOUT_MS + 4_000,
+    );
+
+    if (!response.ok) {
+      return {
+        businesses: [],
+        warning: `Scraper externo devolvió ${response.status}.`,
+      };
+    }
+
+    const json = (await response.json()) as
+      | {
+          results?: Array<Record<string, unknown>>;
+        }
+      | Array<Record<string, unknown>>;
+    const rawItems = Array.isArray(json) ? json : (json.results ?? []);
+
+    const parsed = rawItems
+      .map((item) =>
+        discoveredBusinessSchema.safeParse({
+          businessName:
+            String(item.businessName ?? item.name ?? item.title ?? "unknown business"),
+          city: input.city,
+          category: input.category,
+          address: String(item.address ?? "unknown"),
+          phone: String(item.phone ?? item.phoneNumber ?? "unknown"),
+          websiteUrl: normalizeCandidateUrl(String(item.websiteUrl ?? item.website ?? "unknown")),
+          rating:
+            typeof item.rating === "number"
+              ? item.rating
+              : item.rating
+                ? Number(item.rating)
+                : null,
+          reviewCount:
+            typeof item.reviewCount === "number"
+              ? item.reviewCount
+              : item.reviewCount
+                ? Number(item.reviewCount)
+                : null,
+          googleMapsUrl: String(
+            item.googleMapsUrl ??
+              item.mapsUrl ??
+              item.link ??
+              buildGoogleMapsUrl({
+                title: String(item.businessName ?? item.name ?? item.title ?? ""),
+                address: String(item.address ?? ""),
+                city: input.city,
+              }),
+          ),
+          mapsCategory: String(item.mapsCategory ?? item.category ?? "unknown"),
+          mapsSnippet: String(item.mapsSnippet ?? item.description ?? ""),
+        }),
+      )
+      .filter((item) => item.success)
+      .map((item) => item.data);
+
+    const ranked = rankAndFilterCandidates(parsed, input.limit);
+    if (ranked.length === 0) {
+      return {
+        businesses: [],
+        warning: "Scraper externo no devolvió negocios válidos tras filtrado de calidad.",
+      };
+    }
+    return { businesses: ranked };
+  } catch {
+    return {
+      businesses: [],
+      warning: "Fallo de red usando scraper externo de Google Maps.",
+    };
+  }
+}
+
+async function discoverBusinesses(input: RunCampaignInput): Promise<DiscoveryResult> {
+  const provider = discoveryProvider === "scraper" || discoveryProvider === "serper" ? discoveryProvider : "hybrid";
+
+  if (provider === "serper") {
+    return discoverBusinessesWithSerper(input);
+  }
+  if (provider === "scraper") {
+    return discoverBusinessesWithExternalScraper(input);
+  }
+
+  const serper = await discoverBusinessesWithSerper(input);
+  if (serper.businesses.length > 0) {
+    return serper;
+  }
+  const scraper = await discoverBusinessesWithExternalScraper(input);
+  if (scraper.businesses.length > 0) {
+    return scraper;
+  }
+  return {
+    businesses: [],
+    warning: [serper.warning, scraper.warning].filter(Boolean).join(" | "),
+  };
 }
 
 async function crawlWebsite(url: string) {
@@ -889,7 +1032,8 @@ function safeJson(value: unknown): Json {
 export async function runAutopilotCampaign(input: RunCampaignInput) {
   const parsedInput = runCampaignInputSchema.parse(input);
   const supabase = await createSupabaseServerClient();
-  const discoveredAll = await discoverBusinesses(parsedInput);
+  const discovery = await discoverBusinesses(parsedInput);
+  const discoveredAll = discovery.businesses;
   if (discoveredAll.length === 0) {
     return {
       campaign: {
@@ -909,6 +1053,7 @@ export async function runAutopilotCampaign(input: RunCampaignInput) {
       effectiveLimit: 0,
       results: [],
       warning:
+        discovery.warning ??
         "No se encontraron negocios verificables. Revisa SERPER_API_KEY o prueba otra ciudad/categoria.",
     };
   }
