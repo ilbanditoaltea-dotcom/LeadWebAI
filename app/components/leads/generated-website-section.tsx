@@ -106,7 +106,7 @@ export function GeneratedWebsiteSection({
       setIsRegenerating(true);
       setFeedback(null);
 
-      const response = await fetch("/api/ai/generate-custom-website", {
+      const response = await fetch("/api/agent/generate-website", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -142,11 +142,7 @@ export function GeneratedWebsiteSection({
   }
 
   async function handlePartialRegeneration(
-    endpoint:
-      | "/api/ai/regenerate-style"
-      | "/api/ai/regenerate-copy"
-      | "/api/ai/regenerate-sections"
-      | "/api/ai/regenerate-hero",
+    mode: "style" | "copy" | "sections" | "hero",
     defaultInstruction: string,
   ) {
     if (!generatedWebsite || !generatedWebsiteId) {
@@ -173,13 +169,14 @@ export function GeneratedWebsiteSection({
         confidence: generatedWebsite.website.confidence,
       };
 
-      const response = await fetch(endpoint, {
+      const response = await fetch("/api/agent/regenerate-website", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           generatedWebsiteId,
           currentWebsiteJson,
           instruction,
+          mode,
         }),
       });
 
@@ -383,7 +380,7 @@ export function GeneratedWebsiteSection({
                 type="button"
                 onClick={() =>
                   handlePartialRegeneration(
-                    "/api/ai/regenerate-style",
+                    "style",
                     "Hazlo mas premium y elegante",
                   )
                 }
@@ -397,7 +394,7 @@ export function GeneratedWebsiteSection({
                 type="button"
                 onClick={() =>
                   handlePartialRegeneration(
-                    "/api/ai/regenerate-copy",
+                    "copy",
                     "Haz el texto mas directo y comercial",
                   )
                 }
@@ -411,7 +408,7 @@ export function GeneratedWebsiteSection({
                 type="button"
                 onClick={() =>
                   handlePartialRegeneration(
-                    "/api/ai/regenerate-sections",
+                    "sections",
                     "Añade mas enfoque en reservas y conversion",
                   )
                 }
@@ -425,7 +422,7 @@ export function GeneratedWebsiteSection({
                 type="button"
                 onClick={() =>
                   handlePartialRegeneration(
-                    "/api/ai/regenerate-hero",
+                    "hero",
                     "Cambia el hero a una propuesta mas minimalista",
                   )
                 }

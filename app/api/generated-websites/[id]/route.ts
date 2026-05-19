@@ -102,3 +102,42 @@ export async function PATCH(
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }
+
+export async function GET(
+  _request: Request,
+  context: { params: Promise<{ id: string }> },
+) {
+  try {
+    const { id } = await context.params;
+    const supabase = await createSupabaseServerClient();
+    const { data, error } = await supabase
+      .from("generated_websites")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+    if (!data) {
+      return NextResponse.json({ error: "Generated website not found" }, { status: 404 });
+    }
+
+    return NextResponse.json({
+      id: data.id,
+      leadId: data.lead_id,
+      status: data.status,
+      demoSlug: data.demo_slug,
+      currentWebsiteJson: {
+        businessProfile: data.business_profile,
+        website: data.website,
+        seo: data.seo,
+        contact: data.contact,
+        confidence: data.confidence,
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json({ error: message }, { status: 400 });
+  }
+}

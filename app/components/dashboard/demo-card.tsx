@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { ExternalLink, Eye } from "lucide-react";
 import { SectionCard } from "@/app/components/ui/section-card";
 
@@ -31,20 +32,21 @@ export function DemoCard() {
         ))}
       </div>
       <div className="mt-4 flex flex-wrap gap-2">
-        <button
-          type="button"
+        <Link
+          href="/demo/clinica-sonrisa-demo"
+          target="_blank"
           className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-4 py-2 text-sm font-semibold text-white"
         >
           <Eye className="h-4 w-4" />
           Ver demo
-        </button>
-        <button
-          type="button"
+        </Link>
+        <Link
+          href="/demos"
           className="inline-flex items-center gap-2 rounded-xl border border-[#e5e7eb] bg-white px-4 py-2 text-sm font-semibold text-[#0f172a]"
         >
           <ExternalLink className="h-4 w-4" />
           Compartir URL
-        </button>
+        </Link>
       </div>
     </SectionCard>
   );

@@ -23,6 +23,10 @@ import {
   analyzeBusinessOutputSchema,
   type AnalyzeBusinessOutput,
 } from "@/src/lib/ai/analyze-business";
+import {
+  extractWebsiteIntelligence,
+  type WebsiteIntelligence,
+} from "@/src/lib/ai/website-intelligence";
 
 const discoveredBusinessSchema = z.object({
   businessName: z.string().min(2),
@@ -53,6 +57,13 @@ const serperApiKey = process.env.SERPER_API_KEY;
 const firecrawlApiKey = process.env.FIRECRAWL_API_KEY;
 const scrapingBeeApiKey = process.env.SCRAPINGBEE_API_KEY;
 
+const CAMPAIGN_SAFE_BUDGET_MS = 50_000;
+const DISCOVERY_TIMEOUT_MS = 8_000;
+const CRAWL_TIMEOUT_MS = 7_000;
+const OPENAI_ANALYSIS_TIMEOUT_MS = 12_000;
+const OPENAI_WEBSITE_TIMEOUT_MS = 14_000;
+const OPENAI_MESSAGE_TIMEOUT_MS = 10_000;
+
 function hasUsableOpenAiKey() {
   return Boolean(
     openAiApiKey &&
@@ -60,6 +71,37 @@ function hasUsableOpenAiKey() {
       openAiApiKey !== "tu_api_key" &&
       !openAiApiKey.includes("REPLACE"),
   );
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(timeoutMessage));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
+}
+
+async function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit,
+  timeoutMs: number,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 function slugify(input: string) {
@@ -145,19 +187,23 @@ async function discoverBusinesses(input: RunCampaignInput): Promise<DiscoveredBu
   }
 
   try {
-    const response = await fetch("https://google.serper.dev/places", {
-      method: "POST",
-      headers: {
-        "X-API-KEY": serperApiKey,
-        "Content-Type": "application/json",
+    const response = await fetchWithTimeout(
+      "https://google.serper.dev/places",
+      {
+        method: "POST",
+        headers: {
+          "X-API-KEY": serperApiKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          q: `${input.category} in ${input.city}`,
+          gl: "es",
+          hl: "es",
+          num: input.limit,
+        }),
       },
-      body: JSON.stringify({
-        q: `${input.category} in ${input.city}`,
-        gl: "es",
-        hl: "es",
-        num: input.limit,
-      }),
-    });
+      DISCOVERY_TIMEOUT_MS,
+    );
 
     if (!response.ok) {
       return fallbackDiscoveredBusinesses(input);
@@ -205,31 +251,43 @@ async function discoverBusinesses(input: RunCampaignInput): Promise<DiscoveredBu
 
 async function crawlWebsite(url: string) {
   if (!url || url === "unknown") {
-    return { summary: "No website detected.", pagesScanned: 0 };
+    return { summary: "No website detected.", pagesScanned: 0, rawContent: "" };
   }
+
+  const normalizeContent = (value: string) =>
+    value.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+
+  const buildResult = (content: string) => ({
+    summary: content.slice(0, 3000),
+    pagesScanned: 1,
+    rawContent: content.slice(0, 12000),
+  });
 
   if (firecrawlApiKey) {
     try {
-      const response = await fetch("https://api.firecrawl.dev/v1/scrape", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${firecrawlApiKey}`,
-          "Content-Type": "application/json",
+      const response = await fetchWithTimeout(
+        "https://api.firecrawl.dev/v1/scrape",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${firecrawlApiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            url,
+            formats: ["markdown"],
+            onlyMainContent: true,
+          }),
         },
-        body: JSON.stringify({
-          url,
-          formats: ["markdown"],
-          onlyMainContent: true,
-        }),
-      });
+        CRAWL_TIMEOUT_MS,
+      );
       const json = (await response.json()) as {
         data?: { markdown?: string };
       };
-      const markdown = json.data?.markdown ?? "";
-      return {
-        summary: markdown.slice(0, 3000) || "Website content unavailable.",
-        pagesScanned: 1,
-      };
+      const markdown = (json.data?.markdown ?? "").trim();
+      if (markdown.length > 60) {
+        return buildResult(markdown);
+      }
     } catch {
       // fallback continues below
     }
@@ -238,32 +296,37 @@ async function crawlWebsite(url: string) {
   if (scrapingBeeApiKey) {
     try {
       const endpoint = `https://app.scrapingbee.com/api/v1/?api_key=${scrapingBeeApiKey}&url=${encodeURIComponent(url)}&render_js=false`;
-      const response = await fetch(endpoint);
+      const response = await fetchWithTimeout(endpoint, {}, CRAWL_TIMEOUT_MS);
       const html = await response.text();
-      return {
-        summary: html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").slice(0, 3000),
-        pagesScanned: 1,
-      };
+      const plain = normalizeContent(html);
+      if (plain.length > 60) {
+        return buildResult(plain);
+      }
     } catch {
       // fallback continues below
     }
   }
 
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
-    const response = await fetch(url, {
-      headers: { "User-Agent": "LeadWebAI-Agent/1.0 (+https://leadweb-ai.vercel.app)" },
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
+    const response = await fetchWithTimeout(
+      url,
+      {
+        headers: { "User-Agent": "LeadWebAI-Agent/1.0 (+https://leadweb-ai.vercel.app)" },
+      },
+      CRAWL_TIMEOUT_MS,
+    );
     const html = await response.text();
+    const plain = normalizeContent(html);
+    if (plain.length > 60) {
+      return buildResult(plain);
+    }
     return {
-      summary: html.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").slice(0, 3000),
+      summary: "Website reachable but low-readable content (likely JS-rendered or blocked).",
       pagesScanned: 1,
+      rawContent: html.slice(0, 12000),
     };
   } catch {
-    return { summary: "Website crawl failed.", pagesScanned: 0 };
+    return { summary: "Website crawl failed.", pagesScanned: 0, rawContent: "" };
   }
 }
 
@@ -310,20 +373,22 @@ async function analyzeBusinessWithAI(
     return fallbackAnalysis(business, crawlSummary);
   }
 
-  const openai = new OpenAI({ apiKey: openAiApiKey });
-  const completion = await openai.chat.completions.create({
-    model: "gpt-4.1-mini",
-    temperature: 0.2,
-    response_format: { type: "json_object" },
-    messages: [
-      {
-        role: "system",
-        content:
-          "You are a senior local-business marketing auditor. Return only valid JSON.",
-      },
-      {
-        role: "user",
-        content: `Analyze business and return JSON.
+  try {
+    const openai = new OpenAI({ apiKey: openAiApiKey });
+    const completion = await withTimeout(
+      openai.chat.completions.create({
+        model: "gpt-4.1-mini",
+        temperature: 0.2,
+        response_format: { type: "json_object" },
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a senior local-business marketing auditor. Return only valid JSON.",
+          },
+          {
+            role: "user",
+            content: `Analyze business and return JSON.
 leadId: ${leadId}
 businessName: ${business.businessName}
 category: ${business.category}
@@ -348,26 +413,33 @@ Return schema:
     "features": []
   }
 }`,
-      },
-    ],
-  });
+          },
+        ],
+      }),
+      OPENAI_ANALYSIS_TIMEOUT_MS,
+      "OpenAI analysis timeout",
+    );
 
-  const raw = completion.choices[0]?.message?.content;
-  if (!raw) {
+    const raw = completion.choices[0]?.message?.content;
+    if (!raw) {
+      return fallbackAnalysis(business, crawlSummary);
+    }
+
+    const parsed = analyzeBusinessOutputSchema.safeParse(JSON.parse(raw));
+    if (!parsed.success) {
+      return fallbackAnalysis(business, crawlSummary);
+    }
+
+    return parsed.data;
+  } catch {
     return fallbackAnalysis(business, crawlSummary);
   }
-
-  const parsed = analyzeBusinessOutputSchema.safeParse(JSON.parse(raw));
-  if (!parsed.success) {
-    return fallbackAnalysis(business, crawlSummary);
-  }
-
-  return parsed.data;
 }
 
 function fallbackWebsiteBlueprint(
   business: DiscoveredBusiness,
   analysis: AnalyzeBusinessOutput,
+  websiteIntel: WebsiteIntelligence,
 ): GenerateCustomWebsiteOutput {
   const visualStyle = visualStyleByType(analysis.businessType);
   const paletteByStyle: Record<VisualStyle, { primary: string; secondary: string; background: string; text: string; accent: string }> = {
@@ -384,6 +456,15 @@ function fallbackWebsiteBlueprint(
     vintage: { primary: "#111827", secondary: "#D97706", background: "#0B0F19", text: "#F8FAFC", accent: "#B91C1C" },
     urban: { primary: "#4338CA", secondary: "#22D3EE", background: "#F8FAFC", text: "#0F172A", accent: "#F43F5E" },
   };
+  const intelPalette =
+    websiteIntel.brandColors.length >= 2
+      ? {
+          ...paletteByStyle[visualStyle],
+          primary: websiteIntel.brandColors[0],
+          secondary: websiteIntel.brandColors[1],
+          accent: websiteIntel.brandColors[2] ?? paletteByStyle[visualStyle].accent,
+        }
+      : paletteByStyle[visualStyle];
 
   return {
     businessProfile: {
@@ -395,7 +476,7 @@ function fallbackWebsiteBlueprint(
       mainGoal: analysis.mainGoal,
       tone: "Professional and persuasive",
       visualStyle,
-      colorPalette: paletteByStyle[visualStyle],
+      colorPalette: intelPalette,
       fontStyle: "Modern sans-serif",
       imageStyle: "Professional commercial photography",
     },
@@ -418,7 +499,12 @@ function fallbackWebsiteBlueprint(
           subtitle: "Clear offerings designed for quick decision-making.",
           imagePrompt: "Professional service showcase",
           imageAlt: "Services preview",
-          items: [{ name: "Service 1" }, { name: "Service 2" }, { name: "Service 3" }],
+          items:
+            websiteIntel.serviceHighlights.length > 0
+              ? websiteIntel.serviceHighlights.slice(0, 3).map((name) => ({ name }))
+              : websiteIntel.menuHighlights.length > 0
+                ? websiteIntel.menuHighlights.slice(0, 3).map((name) => ({ name }))
+                : [{ name: "Service 1" }, { name: "Service 2" }, { name: "Service 3" }],
           cta: "See all services",
           order: 1,
         },
@@ -502,25 +588,28 @@ function fallbackWebsiteBlueprint(
 async function generateWebsiteWithAI(
   business: DiscoveredBusiness,
   analysis: AnalyzeBusinessOutput,
+  websiteIntel: WebsiteIntelligence,
 ): Promise<GenerateCustomWebsiteOutput> {
   if (!hasUsableOpenAiKey()) {
-    return fallbackWebsiteBlueprint(business, analysis);
+    return fallbackWebsiteBlueprint(business, analysis, websiteIntel);
   }
 
-  const openai = new OpenAI({ apiKey: openAiApiKey });
-  const completion = await openai.chat.completions.create({
-    model: "gpt-4.1-mini",
-    temperature: 0.45,
-    response_format: { type: "json_object" },
-    messages: [
-      {
-        role: "system",
-        content:
-          "You are a senior CRO web strategist. Return only valid JSON and preserve schema.",
-      },
-      {
-        role: "user",
-        content: `Generate website JSON for:
+  try {
+    const openai = new OpenAI({ apiKey: openAiApiKey });
+    const completion = await withTimeout(
+      openai.chat.completions.create({
+        model: "gpt-4.1-mini",
+        temperature: 0.45,
+        response_format: { type: "json_object" },
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a senior CRO web strategist. Return only valid JSON and preserve schema.",
+          },
+          {
+            role: "user",
+            content: `Generate website JSON for:
 businessName: ${business.businessName}
 city: ${business.city}
 category: ${business.category}
@@ -529,6 +618,7 @@ mainGoal: ${analysis.mainGoal}
 detectedProblems: ${JSON.stringify(analysis.detectedProblems)}
 recommendations: ${JSON.stringify(analysis.recommendations)}
 salesAngle: ${analysis.salesAngle}
+websiteIntelligence: ${JSON.stringify(websiteIntel)}
 
 Return schema exactly:
 {
@@ -566,20 +656,27 @@ Rules:
 - 6 to 10 sections.
 - Must include final_cta.
 - Use conversion-oriented copy.
+- Reuse discovered colors/services/menu/CTA clues from websiteIntelligence when available.
 - Keep contact realistic, never fabricate unknown as real data.`,
-      },
-    ],
-  });
+          },
+        ],
+      }),
+      OPENAI_WEBSITE_TIMEOUT_MS,
+      "OpenAI website timeout",
+    );
 
-  const raw = completion.choices[0]?.message?.content;
-  if (!raw) {
-    return fallbackWebsiteBlueprint(business, analysis);
+    const raw = completion.choices[0]?.message?.content;
+    if (!raw) {
+      return fallbackWebsiteBlueprint(business, analysis, websiteIntel);
+    }
+    const parsed = generateCustomWebsiteOutputSchema.safeParse(JSON.parse(raw));
+    if (!parsed.success) {
+      return fallbackWebsiteBlueprint(business, analysis, websiteIntel);
+    }
+    return parsed.data;
+  } catch {
+    return fallbackWebsiteBlueprint(business, analysis, websiteIntel);
   }
-  const parsed = generateCustomWebsiteOutputSchema.safeParse(JSON.parse(raw));
-  if (!parsed.success) {
-    return fallbackWebsiteBlueprint(business, analysis);
-  }
-  return parsed.data;
 }
 
 function fallbackSalesMessage(
@@ -614,20 +711,22 @@ async function generateSalesMessageWithAI(
     return fallbackSalesMessage(business, analysis, channel, demoUrl);
   }
 
-  const openai = new OpenAI({ apiKey: openAiApiKey });
-  const completion = await openai.chat.completions.create({
-    model: "gpt-4.1-mini",
-    temperature: 0.35,
-    response_format: { type: "json_object" },
-    messages: [
-      {
-        role: "system",
-        content:
-          "You are a senior B2B local-sales copywriter. Return only valid JSON.",
-      },
-      {
-        role: "user",
-        content: `Create suggested sales message.
+  try {
+    const openai = new OpenAI({ apiKey: openAiApiKey });
+    const completion = await withTimeout(
+      openai.chat.completions.create({
+        model: "gpt-4.1-mini",
+        temperature: 0.35,
+        response_format: { type: "json_object" },
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a senior B2B local-sales copywriter. Return only valid JSON.",
+          },
+          {
+            role: "user",
+            content: `Create suggested sales message.
 channel: ${channel}
 businessName: ${business.businessName}
 city: ${business.city}
@@ -650,19 +749,25 @@ Rules:
 - Mention visual demo and 1-2 detected problems.
 - Soft CTA.
 - whatsapp <=700, instagram_dm <=500.`,
-      },
-    ],
-  });
+          },
+        ],
+      }),
+      OPENAI_MESSAGE_TIMEOUT_MS,
+      "OpenAI message timeout",
+    );
 
-  const raw = completion.choices[0]?.message?.content;
-  if (!raw) {
+    const raw = completion.choices[0]?.message?.content;
+    if (!raw) {
+      return fallbackSalesMessage(business, analysis, channel, demoUrl);
+    }
+    const parsed = generateSalesMessageOutputSchema.safeParse(JSON.parse(raw));
+    if (!parsed.success) {
+      return fallbackSalesMessage(business, analysis, channel, demoUrl);
+    }
+    return applyChannelLengthRules(parsed.data);
+  } catch {
     return fallbackSalesMessage(business, analysis, channel, demoUrl);
   }
-  const parsed = generateSalesMessageOutputSchema.safeParse(JSON.parse(raw));
-  if (!parsed.success) {
-    return fallbackSalesMessage(business, analysis, channel, demoUrl);
-  }
-  return applyChannelLengthRules(parsed.data);
 }
 
 async function buildUniqueDemoSlug(baseName: string) {
@@ -673,7 +778,7 @@ async function buildUniqueDemoSlug(baseName: string) {
     .select("demo_slug")
     .ilike("demo_slug", `${baseSlug}%`);
   if (!data || data.length === 0) return baseSlug;
-  return `${baseSlug}-${data.length + 1}`;
+  return `${baseSlug}-${Date.now().toString(36).slice(-4)}`;
 }
 
 function safeJson(value: unknown): Json {
@@ -683,7 +788,12 @@ function safeJson(value: unknown): Json {
 export async function runAutopilotCampaign(input: RunCampaignInput) {
   const parsedInput = runCampaignInputSchema.parse(input);
   const supabase = await createSupabaseServerClient();
-  const discovered = await discoverBusinesses(parsedInput);
+  const discoveredAll = await discoverBusinesses(parsedInput);
+  const maxLeadsPerRun = hasUsableOpenAiKey() ? 1 : 5;
+  const discovered = discoveredAll.slice(0, Math.min(parsedInput.limit, maxLeadsPerRun));
+  const startedAt = Date.now();
+  let truncatedByTimeBudget = false;
+  const truncatedBySafeLimit = discoveredAll.length > discovered.length;
 
   const campaignName = `Autopilot ${parsedInput.category} ${parsedInput.city}`;
   const { data: campaign } = await supabase
@@ -707,6 +817,19 @@ export async function runAutopilotCampaign(input: RunCampaignInput) {
   }> = [];
 
   for (const business of discovered) {
+    if (Date.now() - startedAt > CAMPAIGN_SAFE_BUDGET_MS) {
+      truncatedByTimeBudget = true;
+      results.push({
+        businessName: business.businessName,
+        leadId: null,
+        generatedWebsiteId: null,
+        messageId: null,
+        status: "error",
+        error: "Skipped to avoid server timeout. Retry with lower limit.",
+      });
+      continue;
+    }
+
     try {
       const leadInsert: LeadInsert = {
         business_name: business.businessName,
@@ -748,6 +871,13 @@ export async function runAutopilotCampaign(input: RunCampaignInput) {
       });
 
       const crawl = await crawlWebsite(business.websiteUrl);
+      const websiteIntel = await extractWebsiteIntelligence({
+        websiteUrl: business.websiteUrl,
+        businessName: business.businessName,
+        category: business.category,
+        city: business.city,
+        fallbackText: `${crawl.summary}\n${crawl.rawContent}`,
+      });
       const analysis = await analyzeBusinessWithAI(business, lead.id, crawl.summary);
 
       await supabase
@@ -763,7 +893,7 @@ export async function runAutopilotCampaign(input: RunCampaignInput) {
         })
         .eq("id", lead.id);
 
-      const website = await generateWebsiteWithAI(business, analysis);
+      const website = await generateWebsiteWithAI(business, analysis, websiteIntel);
       const demoSlug = await buildUniqueDemoSlug(business.businessName);
       const { data: generatedWebsite, error: generatedError } = await supabase
         .from("generated_websites")
@@ -885,6 +1015,10 @@ export async function runAutopilotCampaign(input: RunCampaignInput) {
     pendingApprovalCount: ok,
     failedCount: failed,
     mode: hasUsableOpenAiKey() ? "live_ai" : "fallback_no_openai_key",
+    truncatedByTimeBudget,
+    truncatedBySafeLimit,
+    requestedLimit: parsedInput.limit,
+    effectiveLimit: discovered.length,
     results,
   };
 }

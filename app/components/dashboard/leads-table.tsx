@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { SectionCard } from "@/app/components/ui/section-card";
 import { StatusBadge } from "@/app/components/ui/status-badge";
 
@@ -34,12 +35,12 @@ export function LeadsTable({ leads }: LeadsTableProps) {
       title="Leads recientes"
       subtitle="Negocios priorizados por potencial de conversión."
       action={
-        <button
-          type="button"
+        <Link
+          href="/leads"
           className="rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-4 py-2 text-sm font-semibold text-white shadow-sm"
         >
           Ver todos
-        </button>
+        </Link>
       }
     >
       <div className="overflow-x-auto">
@@ -77,9 +78,12 @@ export function LeadsTable({ leads }: LeadsTableProps) {
                   <StatusBadge label={lead.priority} tone={priorityTone[lead.priority]} />
                 </td>
                 <td className="py-3.5">
-                  <button className="text-xs font-semibold text-violet-600 hover:text-violet-700">
+                  <Link
+                    href={`/leads/${lead.id}`}
+                    className="text-xs font-semibold text-violet-600 hover:text-violet-700"
+                  >
                     Ver detalle
-                  </button>
+                  </Link>
                 </td>
               </tr>
             ))}

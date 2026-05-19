@@ -22,8 +22,8 @@ export function PerformanceChart({ data }: PerformanceChartProps) {
       title="Rendimiento semanal"
       subtitle="Evolución de leads, respuestas y cierres."
     >
-      <div className="h-72 min-h-[280px] w-full">
-        <ResponsiveContainer width="100%" height="100%">
+      <div className="h-72 min-h-[280px] w-full min-w-0">
+        <ResponsiveContainer width="100%" height="100%" minWidth={320} minHeight={240}>
           <LineChart data={data}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
             <XAxis dataKey="name" tickLine={false} axisLine={false} />

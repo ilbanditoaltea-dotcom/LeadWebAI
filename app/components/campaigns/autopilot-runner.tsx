@@ -16,6 +16,10 @@ type RunResult = {
   pendingApprovalCount: number;
   failedCount: number;
   mode: string;
+  truncatedByTimeBudget?: boolean;
+  truncatedBySafeLimit?: boolean;
+  requestedLimit?: number;
+  effectiveLimit?: number;
   results: Array<{
     businessName: string;
     leadId: string | null;
@@ -29,7 +33,7 @@ type RunResult = {
 export function AutopilotRunner() {
   const [city, setCity] = useState("Alicante");
   const [category, setCategory] = useState("restaurant");
-  const [limit, setLimit] = useState(6);
+  const [limit, setLimit] = useState(3);
   const [isRunning, setIsRunning] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [result, setResult] = useState<RunResult | null>(null);
@@ -50,7 +54,11 @@ export function AutopilotRunner() {
       }
       setResult(json);
       setFeedback(
-        `Autopilot completado: ${json.pendingApprovalCount}/${json.processedCount} en pending_approval.`,
+        json.truncatedBySafeLimit
+          ? `Autopilot parcial: este entorno procesa ${json.effectiveLimit}/${json.requestedLimit} por ejecución para evitar timeout.`
+          : json.truncatedByTimeBudget
+            ? `Autopilot parcial: ${json.pendingApprovalCount}/${json.processedCount} en pending_approval (recorta el limite para evitar timeout).`
+          : `Autopilot completado: ${json.pendingApprovalCount}/${json.processedCount} en pending_approval.`,
       );
     } catch {
       setFeedback("Error inesperado ejecutando autopilot.");
@@ -108,6 +116,8 @@ export function AutopilotRunner() {
       <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
         El flujo funciona sin intervención humana y deja cada lead en{" "}
         <span className="font-semibold">pending_approval</span> para confirmación manual.
+        <br />
+        En Vercel (plan free), se recomienda 1 lead por ejecución para evitar timeout.
       </div>
 
       {feedback ? <p className="mt-4 text-sm text-slate-700">{feedback}</p> : null}

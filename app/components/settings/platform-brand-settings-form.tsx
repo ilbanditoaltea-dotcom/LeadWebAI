@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2, Save } from "lucide-react";
+import { AlertTriangle, Loader2, Save, Trash2 } from "lucide-react";
 import { SectionCard } from "@/app/components/ui/section-card";
 import type { PlatformBrandSettings } from "@/src/lib/settings/platform-brand";
 
@@ -14,6 +14,7 @@ export function PlatformBrandSettingsForm({
 }: PlatformBrandSettingsFormProps) {
   const [form, setForm] = useState<PlatformBrandSettings>(initialValue);
   const [isSaving, setIsSaving] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
 
   async function handleSave() {
@@ -37,6 +38,38 @@ export function PlatformBrandSettingsForm({
       setFeedback("Error inesperado al guardar.");
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  async function handleClearTestData() {
+    const confirmation = window.prompt(
+      "Acción irreversible. Escribe BORRAR PRUEBAS para confirmar.",
+      "",
+    );
+    if (!confirmation) return;
+
+    try {
+      setIsClearing(true);
+      setFeedback(null);
+
+      const response = await fetch("/api/admin/clear-test-data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmText: confirmation }),
+      });
+      const json = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        setFeedback(json.error ?? "No se pudo borrar los datos de prueba.");
+        return;
+      }
+
+      setFeedback(
+        "Datos de prueba eliminados: leads, demos, campañas, mensajes, actividad e historial.",
+      );
+    } catch {
+      setFeedback("Error inesperado al borrar datos de prueba.");
+    } finally {
+      setIsClearing(false);
     }
   }
 
@@ -177,6 +210,34 @@ export function PlatformBrandSettingsForm({
           </label>
         </div>
         {feedback ? <p className="mt-3 text-xs text-slate-600">{feedback}</p> : null}
+      </SectionCard>
+
+      <SectionCard
+        title="Zona de peligro"
+        subtitle="Borrado masivo para limpiar datos de pruebas."
+        action={
+          <button
+            type="button"
+            onClick={handleClearTestData}
+            disabled={isClearing}
+            className="inline-flex items-center gap-2 rounded-xl border border-rose-300 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isClearing ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Trash2 className="h-4 w-4" />
+            )}
+            Borrar datos de prueba
+          </button>
+        }
+      >
+        <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
+          <p className="inline-flex items-start gap-2">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            Elimina toda la data generada en pruebas: leads, demos, campañas, mensajes,
+            actividades e historial de versiones.
+          </p>
+        </div>
       </SectionCard>
     </div>
   );

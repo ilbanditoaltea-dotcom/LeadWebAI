@@ -21,6 +21,17 @@ function isUuid(value: string) {
   );
 }
 
+function normalizeLooseSlug(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[_\s]+/g, "-")
+    .replace(/[^a-z0-9-]/g, "")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
 async function getGeneratedWebsiteRecord(idOrSlug: string): Promise<GeneratedWebsiteRow | null> {
   if (!hasValidSupabaseEnv()) {
     return null;
@@ -37,6 +48,19 @@ async function getGeneratedWebsiteRecord(idOrSlug: string): Promise<GeneratedWeb
 
     if (!slugError && bySlug) {
       return bySlug;
+    }
+
+    const normalizedSlug = normalizeLooseSlug(idOrSlug);
+    if (normalizedSlug && normalizedSlug !== idOrSlug) {
+      const { data: byNormalizedSlug, error: normalizedError } = await supabase
+        .from("generated_websites")
+        .select("*")
+        .eq("demo_slug", normalizedSlug)
+        .maybeSingle();
+
+      if (!normalizedError && byNormalizedSlug) {
+        return byNormalizedSlug;
+      }
     }
 
     if (!isUuid(idOrSlug)) {

@@ -1,8 +1,23 @@
-import type { GeneratedWebsite } from "@/src/lib/types/ai-website";
+import type { WebsiteColorPalette } from "@/src/lib/types/ai-website";
 import { ImagePromptPlaceholder } from "./block-utils";
 
 type HeroBlockProps = {
-  website: GeneratedWebsite;
+  website: {
+    businessProfile: {
+      businessName: string;
+      colorPalette: WebsiteColorPalette;
+    };
+    website: {
+      hero: {
+        eyebrow: string;
+        title: string;
+        subtitle: string;
+        primaryCTA: string;
+        secondaryCTA: string;
+        backgroundImagePrompt: string;
+      };
+    };
+  };
 };
 
 export function HeroBlock({ website }: HeroBlockProps) {

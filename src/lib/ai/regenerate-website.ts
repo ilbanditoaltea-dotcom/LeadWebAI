@@ -1,8 +1,12 @@
 import OpenAI from "openai";
 import { z } from "zod";
 import { createSupabaseServerClient } from "@/src/lib/supabase/server";
-import { generateCustomWebsiteOutputSchema } from "@/src/lib/ai/generate-custom-website";
+import {
+  generateCustomWebsiteOutputSchema,
+  type GenerateCustomWebsiteOutput,
+} from "@/src/lib/ai/generate-custom-website";
 import type { Json } from "@/src/lib/supabase/database.types";
+import { VISUAL_STYLES, type VisualStyle } from "@/src/lib/types/ai-website";
 
 export type RegenerationMode = "style" | "copy" | "sections" | "hero";
 
@@ -54,6 +58,94 @@ function preserveImportantContact(
     whatsapp: mergeField(incoming.whatsapp, current.whatsapp),
     address: mergeField(incoming.address, current.address),
   };
+}
+
+function paletteByStyle(style: VisualStyle) {
+  const byStyle: Record<
+    VisualStyle,
+    { primary: string; secondary: string; background: string; text: string; accent: string }
+  > = {
+    premium_dark: { primary: "#1D4ED8", secondary: "#38BDF8", background: "#0B1020", text: "#E2E8F0", accent: "#F59E0B" },
+    clean_medical: { primary: "#2563EB", secondary: "#14B8A6", background: "#F8FAFC", text: "#0F172A", accent: "#8B5CF6" },
+    warm_restaurant: { primary: "#B45309", secondary: "#FB7185", background: "#FFF7ED", text: "#292524", accent: "#84CC16" },
+    modern_minimal: { primary: "#475569", secondary: "#A78BFA", background: "#F8FAFC", text: "#0F172A", accent: "#06B6D4" },
+    luxury: { primary: "#BE185D", secondary: "#F9A8D4", background: "#FFF1F2", text: "#3F3F46", accent: "#7C3AED" },
+    playful: { primary: "#2563EB", secondary: "#F59E0B", background: "#F0F9FF", text: "#1E293B", accent: "#10B981" },
+    industrial: { primary: "#1E293B", secondary: "#F97316", background: "#F8FAFC", text: "#0F172A", accent: "#0EA5E9" },
+    natural: { primary: "#166534", secondary: "#4ADE80", background: "#F7FEE7", text: "#14532D", accent: "#EAB308" },
+    corporate: { primary: "#0F4C81", secondary: "#38BDF8", background: "#F8FAFC", text: "#0F172A", accent: "#F97316" },
+    mediterranean: { primary: "#B91C1C", secondary: "#F59E0B", background: "#FFF7ED", text: "#1F2937", accent: "#15803D" },
+    vintage: { primary: "#111827", secondary: "#D97706", background: "#0B0F19", text: "#F8FAFC", accent: "#B91C1C" },
+    urban: { primary: "#4338CA", secondary: "#22D3EE", background: "#F8FAFC", text: "#0F172A", accent: "#F43F5E" },
+  };
+  return byStyle[style];
+}
+
+function styleFromInstruction(instruction: string, current: VisualStyle): VisualStyle {
+  const value = instruction.toLowerCase();
+  if (value.includes("lux")) return "luxury";
+  if (value.includes("minimal")) return "modern_minimal";
+  if (value.includes("vintage")) return "vintage";
+  if (value.includes("natural") || value.includes("eco")) return "natural";
+  if (value.includes("dark") || value.includes("oscuro")) return "premium_dark";
+  if (value.includes("mediterr")) return "mediterranean";
+  if (value.includes("urban")) return "urban";
+
+  const idx = VISUAL_STYLES.indexOf(current);
+  const nextIndex = idx >= 0 ? (idx + 1) % VISUAL_STYLES.length : 0;
+  return VISUAL_STYLES[nextIndex];
+}
+
+function buildDeterministicFallback(
+  mode: RegenerationMode,
+  current: GenerateCustomWebsiteOutput,
+  instruction: string,
+): GenerateCustomWebsiteOutput {
+  if (mode === "style") {
+    const nextStyle = styleFromInstruction(instruction, current.businessProfile.visualStyle);
+    return {
+      ...current,
+      businessProfile: {
+        ...current.businessProfile,
+        visualStyle: nextStyle,
+        colorPalette: paletteByStyle(nextStyle),
+        tone: `Updated style direction: ${instruction}`,
+      },
+    };
+  }
+
+  if (mode === "copy") {
+    return {
+      ...current,
+      website: {
+        ...current.website,
+        hero: {
+          ...current.website.hero,
+          subtitle: `${current.website.hero.subtitle} (${instruction})`,
+        },
+      },
+      confidence: {
+        ...current.confidence,
+        salesAngle: `${current.confidence.salesAngle} (${instruction})`,
+      },
+    };
+  }
+
+  if (mode === "hero") {
+    return {
+      ...current,
+      website: {
+        ...current.website,
+        hero: {
+          ...current.website.hero,
+          title: `${current.website.hero.title} - actualizado`,
+          subtitle: `${current.website.hero.subtitle} (${instruction})`,
+        },
+      },
+    };
+  }
+
+  return current;
 }
 
 export async function regenerateWebsitePartial(
@@ -143,14 +235,25 @@ Rules:
     throw new Error("OpenAI returned empty content.");
   }
 
-  const parsed = generateCustomWebsiteOutputSchema.parse(JSON.parse(raw));
+  let rawJson: unknown = null;
+  try {
+    rawJson = JSON.parse(raw);
+  } catch {
+    rawJson = null;
+  }
+  const parsed = rawJson
+    ? generateCustomWebsiteOutputSchema.safeParse(rawJson)
+    : { success: false as const };
+  const validOutput = parsed.success
+    ? parsed.data
+    : buildDeterministicFallback(mode, input.currentWebsiteJson, input.instruction);
   const mergedContact = preserveImportantContact(
     input.currentWebsiteJson.contact,
-    parsed.contact,
+    validOutput.contact,
   );
 
   const finalJson = {
-    ...parsed,
+    ...validOutput,
     contact: mergedContact,
   };
   const websiteJson = finalJson.website as unknown as Json;

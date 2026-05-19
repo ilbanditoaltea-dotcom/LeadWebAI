@@ -27,7 +27,7 @@ export function AnalyzeWithAiButton({ payload }: AnalyzeWithAiButtonProps) {
       setIsLoading(true);
       setMessage(null);
 
-      const response = await fetch("/api/ai/analyze-business", {
+      const response = await fetch("/api/agent/analyze-business", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

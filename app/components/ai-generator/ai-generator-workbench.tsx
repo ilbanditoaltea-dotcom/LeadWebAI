@@ -68,6 +68,7 @@ const categoryLabels: Record<(typeof categories)[number], string> = {
 type GeneratorForm = {
   businessName: string;
   category: string;
+  restaurantSubtype: "italian" | "mediterranean" | "sushi" | "burger" | "vegan" | "fine_dining";
   city: string;
   description: string;
   currentWebsite: string;
@@ -79,9 +80,27 @@ type GeneratorForm = {
   selectedProblems: string[];
 };
 
+export type AiGeneratorLeadOption = {
+  id: string;
+  businessName: string;
+  category: string;
+  city: string;
+  description: string;
+  websiteUrl: string;
+  phone: string;
+  email: string;
+  whatsapp: string;
+  address: string;
+  detectedProblems: string[];
+  recommendations: string[];
+  generatedWebsiteId: string | null;
+  demoSlug: string | null;
+};
+
 const initialForm: GeneratorForm = {
   businessName: "Trattoria Nova",
   category: "restaurant",
+  restaurantSubtype: "italian",
   city: "Madrid",
   description: "Restaurante italiano con cocina mediterranea y servicio para reservas.",
   currentWebsite: "https://negocio-demo.com",
@@ -92,6 +111,31 @@ const initialForm: GeneratorForm = {
   goal: "reservas",
   selectedProblems: ["web antigua", "sin reservas online", "mala experiencia móvil"],
 };
+
+type AiGeneratorWorkbenchProps = {
+  initialLeads: AiGeneratorLeadOption[];
+};
+
+function buildFormFromLead(lead: AiGeneratorLeadOption | null): GeneratorForm {
+  if (!lead) return initialForm;
+  return {
+    businessName: lead.businessName || initialForm.businessName,
+    category: normalizeCategory(lead.category),
+    restaurantSubtype: initialForm.restaurantSubtype,
+    city: lead.city || initialForm.city,
+    description: lead.description || initialForm.description,
+    currentWebsite: lead.websiteUrl || initialForm.currentWebsite,
+    phone: lead.phone || initialForm.phone,
+    email: lead.email || initialForm.email,
+    whatsapp: lead.whatsapp || initialForm.whatsapp,
+    address: lead.address || initialForm.address,
+    goal: mapGoalByCategory(lead.category),
+    selectedProblems:
+      lead.detectedProblems.length > 0
+        ? lead.detectedProblems
+        : initialForm.selectedProblems,
+  };
+}
 
 function pickTemplateId(category: string, goal: GoalOption["value"]) {
   if (category === "restaurant" || goal === "reservas") {
@@ -113,10 +157,48 @@ function pickTemplateId(category: string, goal: GoalOption["value"]) {
   return "clinic-demo";
 }
 
+const restaurantStyleBySubtype: Record<
+  GeneratorForm["restaurantSubtype"],
+  { visualStyle: GeneratedWebsite["businessProfile"]["visualStyle"]; toneHint: string }
+> = {
+  italian: { visualStyle: "mediterranean", toneHint: "tradicion italiana, calido y familiar" },
+  mediterranean: { visualStyle: "warm_restaurant", toneHint: "fresco mediterraneo, luminoso y natural" },
+  sushi: { visualStyle: "modern_minimal", toneHint: "minimal japones, limpio y premium" },
+  burger: { visualStyle: "urban", toneHint: "urbano, directo y joven" },
+  vegan: { visualStyle: "natural", toneHint: "natural, eco y cercano" },
+  fine_dining: { visualStyle: "luxury", toneHint: "alta cocina, elegante y sofisticado" },
+};
+
+function mapGoalByCategory(category: string): GoalOption["value"] {
+  const value = category.toLowerCase();
+  if (value.includes("rest")) return "reservas";
+  if (value.includes("clinic") || value.includes("dental") || value.includes("beauty")) {
+    return "citas";
+  }
+  if (value.includes("barber")) return "whatsapp";
+  if (value.includes("shop") || value.includes("tienda")) return "ventas";
+  if (value.includes("hotel")) return "reservas";
+  return "leads";
+}
+
+function normalizeCategory(category: string): string {
+  const value = category.toLowerCase();
+  if (value.includes("rest")) return "restaurant";
+  if (value.includes("clinic") || value.includes("dental")) return "clinic";
+  if (value.includes("barber")) return "barbershop";
+  if (value.includes("beauty") || value.includes("pelu")) return "beauty";
+  if (value.includes("shop") || value.includes("tienda")) return "shop";
+  if (value.includes("hotel")) return "hotel";
+  if (value.includes("fitness") || value.includes("gym")) return "fitness";
+  return "generic";
+}
+
 function buildPreviewWebsite(form: GeneratorForm): GeneratedWebsite {
   const selectedGoal = goalOptions.find((goal) => goal.value === form.goal) ?? goalOptions[0];
   const templateId = pickTemplateId(form.category, form.goal);
   const base = generatedWebsiteMocksById[templateId] ?? generatedWebsiteMocksById["restaurant-demo"];
+  const restaurantStyle =
+    form.category === "restaurant" ? restaurantStyleBySubtype[form.restaurantSubtype] : null;
 
   return {
     ...base,
@@ -133,6 +215,11 @@ function buildPreviewWebsite(form: GeneratorForm): GeneratedWebsite {
             ? "Clientes que buscan estilo premium y experiencia personalizada."
             : "Personas que quieren una experiencia local memorable y facil de reservar.",
       mainGoal: selectedGoal.websiteGoal,
+      visualStyle: restaurantStyle?.visualStyle ?? base.businessProfile.visualStyle,
+      tone:
+        form.category === "restaurant" && restaurantStyle
+          ? `Comercial premium con enfoque en ${restaurantStyle.toneHint}`
+          : base.businessProfile.tone,
     },
     website: {
       ...base.website,
@@ -140,7 +227,10 @@ function buildPreviewWebsite(form: GeneratorForm): GeneratedWebsite {
         ...base.website.confidence,
         detectedProblems:
           form.selectedProblems.length > 0 ? form.selectedProblems : base.website.confidence.detectedProblems,
-        salesAngle: `Estrategia centrada en ${selectedGoal.label.toLowerCase()} para convertir trafico local en oportunidades reales.`,
+        salesAngle:
+          form.category === "restaurant" && restaurantStyle
+            ? `Estrategia de ${form.restaurantSubtype.replace("_", " ")} centrada en ${selectedGoal.label.toLowerCase()} y diferenciación visual.`
+            : `Estrategia centrada en ${selectedGoal.label.toLowerCase()} para convertir trafico local en oportunidades reales.`,
       },
       contact: {
         phone: form.phone || base.website.contact.phone,
@@ -184,28 +274,167 @@ function TextInput({ label, value, onChange, placeholder, multiline }: TextInput
   );
 }
 
-export function AiGeneratorWorkbench() {
-  const [form, setForm] = useState<GeneratorForm>(initialForm);
+export function AiGeneratorWorkbench({ initialLeads }: AiGeneratorWorkbenchProps) {
+  const [form, setForm] = useState<GeneratorForm>(() => buildFormFromLead(initialLeads[0] ?? null));
   const [mobilePreview, setMobilePreview] = useState(false);
-  const [generatedWebsiteId, setGeneratedWebsiteId] = useState("");
+  const [generatedWebsiteId, setGeneratedWebsiteId] = useState(initialLeads[0]?.generatedWebsiteId ?? "");
+  const [selectedLeadId, setSelectedLeadId] = useState(initialLeads[0]?.id ?? "");
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
 
   const previewWebsite = useMemo(() => buildPreviewWebsite(form), [form]);
+  const selectedLead = useMemo(
+    () => initialLeads.find((lead) => lead.id === selectedLeadId) ?? null,
+    [initialLeads, selectedLeadId],
+  );
 
   const selectedGoalLabel =
     goalOptions.find((goal) => goal.value === form.goal)?.label ?? "Reservas";
+  const primaryBusinessObjectiveLabel = `Mejorar negocio online (enfoque: ${selectedGoalLabel.toLowerCase()})`;
 
   const updateForm = <K extends keyof GeneratorForm>(key: K, value: GeneratorForm[K]) => {
     setForm((current) => ({ ...current, [key]: value }));
   };
 
+  function handleSelectLead(leadId: string) {
+    setSelectedLeadId(leadId);
+    const lead = initialLeads.find((item) => item.id === leadId) ?? null;
+    setForm(buildFormFromLead(lead));
+    setGeneratedWebsiteId(lead?.generatedWebsiteId ?? "");
+    setActionFeedback(null);
+  }
+
+  async function handleGenerateWithAI() {
+    if (!selectedLead) {
+      setActionFeedback("Selecciona un negocio encontrado para generar la demo.");
+      return;
+    }
+
+    try {
+      setIsActionLoading(true);
+      setActionFeedback(null);
+      const selectedGoal = goalOptions.find((goal) => goal.value === form.goal) ?? goalOptions[0];
+
+      const response = await fetch("/api/agent/generate-website", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          leadId: selectedLead.id,
+          businessName: form.businessName,
+          category: form.category,
+          city: form.city,
+          description:
+            form.category === "restaurant"
+              ? `${form.description}\n\nRestaurant subtype: ${form.restaurantSubtype}.`
+              : form.description,
+          phone: form.phone,
+          email: form.email,
+          whatsapp: form.whatsapp,
+          address: form.address,
+          websiteUrl: form.currentWebsite,
+          detectedProblems: form.selectedProblems,
+          recommendations: selectedLead.recommendations,
+          targetGoal: selectedGoal.websiteGoal,
+        }),
+      });
+
+      const json = (await response.json()) as {
+        error?: string;
+        generatedWebsiteId?: string;
+        demoSlug?: string;
+      };
+
+      if (!response.ok) {
+        setActionFeedback(json.error ?? "No se pudo generar la web con IA.");
+        return;
+      }
+
+      if (json.generatedWebsiteId) {
+        setGeneratedWebsiteId(json.generatedWebsiteId);
+      }
+      setActionFeedback(
+        json.demoSlug
+          ? `Demo generada correctamente. URL: /demo/${json.demoSlug}`
+          : "Demo generada correctamente.",
+      );
+    } catch {
+      setActionFeedback("Error inesperado al generar la demo con IA.");
+    } finally {
+      setIsActionLoading(false);
+    }
+  }
+
+  async function handleSaveDemo() {
+    if (!generatedWebsiteId.trim()) {
+      setActionFeedback("Primero genera una demo para obtener generatedWebsiteId.");
+      return;
+    }
+
+    try {
+      setIsActionLoading(true);
+      setActionFeedback(null);
+      const response = await fetch(`/api/generated-websites/${generatedWebsiteId.trim()}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          businessProfile: previewWebsite.businessProfile,
+          website: previewWebsite.website,
+          seo: previewWebsite.website.seo,
+          contact: previewWebsite.website.contact,
+          confidence: previewWebsite.website.confidence,
+        }),
+      });
+      const json = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        setActionFeedback(json.error ?? "No se pudo guardar la demo.");
+        return;
+      }
+      setActionFeedback("Demo guardada en Supabase.");
+    } catch {
+      setActionFeedback("Error inesperado al guardar la demo.");
+    } finally {
+      setIsActionLoading(false);
+    }
+  }
+
+  async function handlePublishDemo() {
+    if (!generatedWebsiteId.trim()) {
+      setActionFeedback("Primero genera una demo para poder publicarla.");
+      return;
+    }
+
+    try {
+      setIsActionLoading(true);
+      setActionFeedback(null);
+
+      const publishResponse = await fetch(`/api/generated-websites/${generatedWebsiteId.trim()}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "approved" }),
+      });
+      const publishJson = (await publishResponse.json()) as { error?: string };
+      if (!publishResponse.ok) {
+        setActionFeedback(publishJson.error ?? "No se pudo publicar la demo.");
+        return;
+      }
+
+      if (selectedLeadId) {
+        await fetch("/api/leads/update-status", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ leadId: selectedLeadId, status: "approved" }),
+        });
+      }
+      setActionFeedback("Demo publicada y lead marcado como aprobado.");
+    } catch {
+      setActionFeedback("Error inesperado al publicar la demo.");
+    } finally {
+      setIsActionLoading(false);
+    }
+  }
+
   async function handlePartialRegeneration(
-    endpoint:
-      | "/api/ai/regenerate-style"
-      | "/api/ai/regenerate-copy"
-      | "/api/ai/regenerate-sections"
-      | "/api/ai/regenerate-hero",
+    mode: "style" | "copy" | "sections" | "hero",
     defaultInstruction: string,
   ) {
     if (!generatedWebsiteId.trim()) {
@@ -221,24 +450,45 @@ export function AiGeneratorWorkbench() {
       setIsActionLoading(true);
       setActionFeedback(null);
 
-      const currentWebsiteJson = {
-        businessProfile: previewWebsite.businessProfile,
-        website: {
-          hero: previewWebsite.website.hero,
-          sections: previewWebsite.website.sections,
-        },
-        seo: previewWebsite.website.seo,
-        contact: previewWebsite.website.contact,
-        confidence: previewWebsite.website.confidence,
-      };
+      let currentWebsiteJson:
+        | {
+            businessProfile: unknown;
+            website: unknown;
+            seo: unknown;
+            contact: unknown;
+            confidence: unknown;
+          }
+        | null = null;
 
-      const response = await fetch(endpoint, {
+      const currentResponse = await fetch(`/api/generated-websites/${generatedWebsiteId.trim()}`);
+      if (currentResponse.ok) {
+        const currentData = (await currentResponse.json()) as {
+          currentWebsiteJson?: {
+            businessProfile: unknown;
+            website: unknown;
+            seo: unknown;
+            contact: unknown;
+            confidence: unknown;
+          };
+        };
+        currentWebsiteJson = currentData.currentWebsiteJson ?? null;
+      }
+
+      if (!currentWebsiteJson) {
+        setActionFeedback(
+          "No se pudo cargar la web actual desde Supabase. Genera y guarda una demo antes de regenerar.",
+        );
+        return;
+      }
+
+      const response = await fetch("/api/agent/regenerate-website", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           generatedWebsiteId: generatedWebsiteId.trim(),
           currentWebsiteJson,
           instruction,
+          mode,
         }),
       });
 
@@ -270,7 +520,12 @@ export function AiGeneratorWorkbench() {
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap gap-2">
-            <button className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-4 py-2 text-sm font-semibold text-white">
+            <button
+              type="button"
+              onClick={handleGenerateWithAI}
+              disabled={isActionLoading}
+              className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+            >
               <WandSparkles className="h-4 w-4" />
               Generar con IA
             </button>
@@ -278,10 +533,11 @@ export function AiGeneratorWorkbench() {
               type="button"
               onClick={() =>
                 handlePartialRegeneration(
-                  "/api/ai/regenerate-style",
+                  "style",
                   "Hazlo más premium y elegante",
                 )
               }
+              disabled={isActionLoading}
               className="inline-flex items-center gap-2 rounded-xl border border-violet-100 bg-violet-50 px-4 py-2 text-sm font-medium text-violet-700"
             >
               <Palette className="h-4 w-4" />
@@ -291,10 +547,11 @@ export function AiGeneratorWorkbench() {
               type="button"
               onClick={() =>
                 handlePartialRegeneration(
-                  "/api/ai/regenerate-copy",
+                  "copy",
                   "Haz el texto más directo y comercial",
                 )
               }
+              disabled={isActionLoading}
               className="inline-flex items-center gap-2 rounded-xl border border-violet-100 bg-violet-50 px-4 py-2 text-sm font-medium text-violet-700"
             >
               <RefreshCw className="h-4 w-4" />
@@ -304,10 +561,11 @@ export function AiGeneratorWorkbench() {
               type="button"
               onClick={() =>
                 handlePartialRegeneration(
-                  "/api/ai/regenerate-sections",
+                  "sections",
                   "Añade más enfoque en reservas",
                 )
               }
+              disabled={isActionLoading}
               className="inline-flex items-center gap-2 rounded-xl border border-violet-100 bg-violet-50 px-4 py-2 text-sm font-medium text-violet-700"
             >
               <RefreshCw className="h-4 w-4" />
@@ -317,10 +575,11 @@ export function AiGeneratorWorkbench() {
               type="button"
               onClick={() =>
                 handlePartialRegeneration(
-                  "/api/ai/regenerate-hero",
+                  "hero",
                   "Cambia el estilo a barbería vintage",
                 )
               }
+              disabled={isActionLoading}
               className="inline-flex items-center gap-2 rounded-xl border border-violet-100 bg-violet-50 px-4 py-2 text-sm font-medium text-violet-700"
             >
               <RefreshCw className="h-4 w-4" />
@@ -335,11 +594,21 @@ export function AiGeneratorWorkbench() {
               {mobilePreview ? <Laptop2 className="h-4 w-4" /> : <Smartphone className="h-4 w-4" />}
               Vista móvil
             </button>
-            <button className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700">
+            <button
+              type="button"
+              onClick={handleSaveDemo}
+              disabled={isActionLoading}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
               <Save className="h-4 w-4" />
               Guardar demo
             </button>
-            <button className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700">
+            <button
+              type="button"
+              onClick={handlePublishDemo}
+              disabled={isActionLoading}
+              className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
               <Send className="h-4 w-4" />
               Publicar demo
             </button>
@@ -348,6 +617,37 @@ export function AiGeneratorWorkbench() {
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="mb-4 grid gap-3 rounded-2xl border border-violet-100 bg-violet-50/60 p-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+          <label className="space-y-1.5">
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Negocio encontrado
+            </span>
+            <select
+              value={selectedLeadId}
+              onChange={(event) => handleSelectLead(event.target.value)}
+              className="w-full rounded-xl border border-violet-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-violet-500/20 transition focus:ring"
+            >
+              {initialLeads.length === 0 ? (
+                <option value="">Sin negocios disponibles</option>
+              ) : null}
+              {initialLeads.map((lead) => (
+                <option key={lead.id} value={lead.id}>
+                  {lead.businessName} - {lead.city} ({lead.category})
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="text-xs text-slate-600">
+            {selectedLead?.generatedWebsiteId ? (
+              <p>
+                Demo existente detectada. ID:{" "}
+                <span className="font-semibold">{selectedLead.generatedWebsiteId}</span>
+              </p>
+            ) : (
+              <p>Este negocio aun no tiene demo guardada.</p>
+            )}
+          </div>
+        </div>
         <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
           Elige el tipo de sitio
         </p>
@@ -385,6 +685,31 @@ export function AiGeneratorWorkbench() {
           <h3 className="mb-4 text-base font-semibold text-slate-900">Datos del negocio</h3>
           <div className="space-y-3">
             <TextInput label="Nombre del negocio" value={form.businessName} onChange={(value) => updateForm("businessName", value)} />
+
+            {form.category === "restaurant" ? (
+              <label className="space-y-1.5">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Tipo de restaurante
+                </span>
+                <select
+                  value={form.restaurantSubtype}
+                  onChange={(event) =>
+                    updateForm(
+                      "restaurantSubtype",
+                      event.target.value as GeneratorForm["restaurantSubtype"],
+                    )
+                  }
+                  className="w-full rounded-xl border border-violet-100 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-violet-500/20 transition focus:ring"
+                >
+                  <option value="italian">Italiano</option>
+                  <option value="mediterranean">Mediterraneo</option>
+                  <option value="sushi">Sushi</option>
+                  <option value="burger">Burger</option>
+                  <option value="vegan">Vegano</option>
+                  <option value="fine_dining">Fine dining</option>
+                </select>
+              </label>
+            ) : null}
 
             <label className="space-y-1.5">
               <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Categoria</span>
@@ -481,7 +806,7 @@ export function AiGeneratorWorkbench() {
             </article>
             <article className="rounded-2xl border border-slate-100 bg-slate-50 p-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Objetivo principal</p>
-              <p className="mt-1 font-medium">{selectedGoalLabel}</p>
+              <p className="mt-1 font-medium">{primaryBusinessObjectiveLabel}</p>
             </article>
             <article className="rounded-2xl border border-slate-100 bg-slate-50 p-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Estilo visual elegido</p>

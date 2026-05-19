@@ -7,6 +7,7 @@ import {
 } from "@/app/components/leads/generated-website-versions";
 import { SalesMessageSection } from "@/app/components/leads/sales-message-section";
 import { ContactApprovalChecklist } from "@/app/components/leads/contact-approval-checklist";
+import { BeforeAfterSalesBrief } from "@/app/components/leads/before-after-sales-brief";
 import { OpportunityScore } from "@/app/components/ui/opportunity-score";
 import { StatusBadge } from "@/app/components/ui/status-badge";
 import { getDemoBusinessCaseByLeadId } from "@/app/lib/demo-business-cases";
@@ -225,6 +226,10 @@ export default async function LeadDetailPage({ params }: LeadDetailPageProps) {
   const latestMessageChannel = latestMessage.channel ?? mockCase?.suggestedMessage.channel ?? "email";
   const latestMessageSubject = latestMessage.subject || mockCase?.suggestedMessage.subject || "";
   const latestMessageBody = latestMessage.body || mockCase?.suggestedMessage.body || "";
+  const demoUrl = demoSlug ? `/demo/${demoSlug}` : generatedWebsiteId ? `/demo/${generatedWebsiteId}` : null;
+  const salesAngle =
+    generatedWebsite?.website.confidence.salesAngle ??
+    "Propuesta orientada a convertir visitas locales en reservas/contactos.";
 
   return (
     <div className="space-y-6">
@@ -369,6 +374,17 @@ export default async function LeadDetailPage({ params }: LeadDetailPageProps) {
         generatedWebsiteId={generatedWebsiteId}
         demoSlug={demoSlug}
         status={generatedWebsiteResult.row?.status ?? mockCase?.campaignStatus ?? null}
+      />
+
+      <BeforeAfterSalesBrief
+        businessName={businessName}
+        city={city}
+        category={category}
+        websiteUrl={websiteUrl}
+        detectedProblems={detectedProblems}
+        recommendations={recommendations}
+        salesAngle={salesAngle}
+        demoUrl={demoUrl}
       />
 
       <GeneratedWebsiteVersions versions={generatedWebsiteVersions} />

@@ -4,6 +4,7 @@ import {
   generateCustomWebsiteInputSchema,
   generateCustomWebsiteOutputSchema,
 } from "@/src/lib/ai/generate-custom-website";
+import { extractWebsiteIntelligence } from "@/src/lib/ai/website-intelligence";
 import { createSupabaseServerClient } from "@/src/lib/supabase/server";
 import type { Json } from "@/src/lib/supabase/database.types";
 
@@ -48,6 +49,13 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const input = generateCustomWebsiteInputSchema.parse(body);
+    const websiteIntel = await extractWebsiteIntelligence({
+      websiteUrl: input.websiteUrl,
+      businessName: input.businessName,
+      category: input.category,
+      city: input.city,
+      fallbackText: `${input.description}\n${input.recommendations.join("\n")}`,
+    });
 
     const openai = new OpenAI({ apiKey: openAiApiKey });
 
@@ -79,6 +87,7 @@ Input:
 - detectedProblems: ${JSON.stringify(input.detectedProblems)}
 - recommendations: ${JSON.stringify(input.recommendations)}
 - targetGoal: ${input.targetGoal}
+- websiteIntel: ${JSON.stringify(websiteIntel)}
 
 Required output schema:
 {
@@ -148,7 +157,7 @@ Rules:
 - No fixed templates.
 - Decide sections dynamically by business.
 - Decide section order.
-- Choose tone, visual style, and color palette.
+- Choose tone, visual style, and color palette grounded in websiteIntel when available.
 - Generate real commercial copy, specific to this business.
 - Do not generate React, code, or HTML.
 - Only JSON.
@@ -193,20 +202,24 @@ Rules:
     const contactJson = generated.contact as unknown as Json;
     const confidenceJson = generated.confidence as unknown as Json;
 
-    const { error: insertError } = await supabase.from("generated_websites").insert({
-      lead_id: input.leadId,
-      business_profile: generated.businessProfile,
-      website: websiteJson,
-      seo: seoJson,
-      contact: contactJson,
-      confidence: confidenceJson,
-      demo_slug: demoSlug,
-      status: "draft",
-    });
+    const { data: insertedWebsite, error: insertError } = await supabase
+      .from("generated_websites")
+      .insert({
+        lead_id: input.leadId,
+        business_profile: generated.businessProfile,
+        website: websiteJson,
+        seo: seoJson,
+        contact: contactJson,
+        confidence: confidenceJson,
+        demo_slug: demoSlug,
+        status: "draft",
+      })
+      .select("id, demo_slug")
+      .maybeSingle();
 
-    if (insertError) {
+    if (insertError || !insertedWebsite) {
       return NextResponse.json(
-        { error: `Failed to save generated website: ${insertError.message}` },
+        { error: `Failed to save generated website: ${insertError?.message ?? "Unknown insert error"}` },
         { status: 500 },
       );
     }
@@ -223,7 +236,11 @@ Rules:
       );
     }
 
-    return NextResponse.json(generated);
+    return NextResponse.json({
+      ...generated,
+      generatedWebsiteId: insertedWebsite.id,
+      demoSlug: insertedWebsite.demo_slug,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 400 });

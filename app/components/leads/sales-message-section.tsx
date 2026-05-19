@@ -46,7 +46,7 @@ export function SalesMessageSection({
       setIsGenerating(true);
       setFeedback(null);
 
-      const response = await fetch("/api/ai/generate-sales-message", {
+      const response = await fetch("/api/agent/generate-message", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

@@ -100,6 +100,13 @@ export function CampaignsKanban({ initialLeads, useSupabase }: CampaignsKanbanPr
     () => leads.find((lead) => lead.id === selectedLeadId) ?? leads[0] ?? null,
     [leads, selectedLeadId],
   );
+  const campaignTitle = useMemo(() => {
+    const seed = leads[0];
+    if (!seed) return "Campaña activa";
+    const category = seed.category?.trim() || "General";
+    const city = seed.city?.trim() || "Sin ciudad";
+    return `Campaña: ${category} ${city}`;
+  }, [leads]);
 
   async function persistStatus(leadId: string, nextStatus: CampaignLead["status"]) {
     try {
@@ -146,7 +153,7 @@ export function CampaignsKanban({ initialLeads, useSupabase }: CampaignsKanbanPr
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-2xl font-semibold tracking-tight text-[#0f172a]">
-              Campaña: Restaurantes Alicante
+              {campaignTitle}
             </h2>
             <p className="mt-1 text-sm text-[#64748b]">
               CRM visual para mover leads desde prospección hasta cierre.
@@ -308,8 +315,8 @@ export function CampaignsKanban({ initialLeads, useSupabase }: CampaignsKanbanPr
         </SectionCard>
 
         <SectionCard title="Gráficos de rendimiento" subtitle="Apertura, respuesta y cierres">
-          <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
+          <div className="h-64 min-h-[256px] w-full min-w-0">
+            <ResponsiveContainer width="100%" height="100%" minWidth={280} minHeight={220}>
               <LineChart data={performanceData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                 <XAxis dataKey="name" tickLine={false} axisLine={false} />

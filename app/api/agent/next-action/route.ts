@@ -1,17 +1,12 @@
 import { NextResponse } from "next/server";
-import {
-  runAutopilotCampaign,
-  runCampaignInputSchema,
-} from "@/src/lib/agent/run-campaign";
-
-export const runtime = "nodejs";
-export const maxDuration = 60;
+import { getNextActionWithAgent } from "@/src/lib/agent/client";
+import { agentNextActionInputSchema } from "@/src/lib/agent/schemas";
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const input = runCampaignInputSchema.parse(body);
-    const output = await runAutopilotCampaign(input);
+    const input = agentNextActionInputSchema.parse(body);
+    const output = await getNextActionWithAgent(input);
     return NextResponse.json(output);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
