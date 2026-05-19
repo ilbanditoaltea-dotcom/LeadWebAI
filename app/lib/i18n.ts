@@ -27,6 +27,8 @@ type Texts = {
   proPlan: string;
   proPlanBody: string;
   seeBenefits: string;
+  agentStatus: string;
+  aiEngineOn: string;
   language: string;
   dashboardWelcome: string;
   dashboardSummary: string;
@@ -41,6 +43,8 @@ const textsByLocale: Record<Locale, Texts> = {
     proPlan: "Plan Pro",
     proPlanBody: "Aprovecha al maximo LeadWeb AI con mas demos y automatizaciones.",
     seeBenefits: "Ver beneficios",
+    agentStatus: "Estado del agente",
+    aiEngineOn: "Motor IA activo",
     language: "Idioma",
     dashboardWelcome: "Bienvenido de nuevo, Alejandro",
     dashboardSummary: "Aqui tienes un resumen de tu agente de prospeccion.",
@@ -53,6 +57,8 @@ const textsByLocale: Record<Locale, Texts> = {
     proPlan: "Pro Plan",
     proPlanBody: "Get the most out of LeadWeb AI with more demos and automations.",
     seeBenefits: "View benefits",
+    agentStatus: "Agent status",
+    aiEngineOn: "AI engine active",
     language: "Language",
     dashboardWelcome: "Welcome back, Alejandro",
     dashboardSummary: "Here is a summary of your prospecting agent.",

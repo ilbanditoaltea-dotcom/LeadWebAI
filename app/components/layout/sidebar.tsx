@@ -1,15 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { ChevronDown, Rocket, Sparkles } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { Loader2, LogOut, Rocket } from "lucide-react";
+import { useState } from "react";
 import { sidebarItems } from "@/app/lib/mock-data";
 import { sidebarLabel, t } from "@/app/lib/i18n";
 import { useLocale } from "@/app/components/layout/locale-provider";
 
 export function Sidebar() {
+  const router = useRouter();
   const pathname = usePathname();
   const { locale } = useLocale();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const isActive = (href: string) => {
     if (pathname === href) {
@@ -22,6 +25,17 @@ export function Sidebar() {
 
     return false;
   };
+
+  async function handleLogout() {
+    try {
+      setIsLoggingOut(true);
+      await fetch("/api/auth/logout", { method: "POST" });
+      router.push("/login");
+      router.refresh();
+    } finally {
+      setIsLoggingOut(false);
+    }
+  }
 
   return (
     <aside className="fixed inset-y-0 left-0 z-30 hidden w-[18.5rem] border-r border-[#1e293b] bg-gradient-to-b from-[#07111f] via-[#0b1324] to-[#07111f] px-4 py-5 text-slate-100 lg:flex lg:flex-col">
@@ -61,27 +75,24 @@ export function Sidebar() {
           <div className="mb-3 flex items-center gap-3">
             <div className="h-9 w-9 rounded-full bg-gradient-to-r from-violet-500 to-indigo-500" />
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-white">Alejandro</p>
-              <p className="text-xs text-slate-300">{t(locale, "proPlan")}</p>
+              <p className="truncate text-sm font-semibold text-white">Equipo LeadWeb</p>
+              <p className="text-xs text-slate-300">Acceso interno</p>
             </div>
-            <ChevronDown className="ml-auto h-4 w-4 text-slate-400" />
           </div>
-        </div>
-
-        <div className="rounded-2xl border border-violet-400/30 bg-gradient-to-b from-violet-600/35 to-indigo-700/35 p-4">
-          <div className="mb-2 inline-flex rounded-lg bg-white/20 p-1.5 text-white">
-            <Sparkles className="h-4 w-4" />
-          </div>
-          <p className="text-sm font-semibold text-white">{t(locale, "proPlan")}</p>
-          <p className="mt-1 text-xs text-violet-100">
-            {t(locale, "proPlanBody")}
-          </p>
           <button
             type="button"
-            className="mt-3 w-full rounded-lg bg-white px-3 py-2 text-xs font-semibold text-indigo-700"
+            onClick={handleLogout}
+            disabled={isLoggingOut}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
           >
-            {t(locale, "seeBenefits")}
+            {isLoggingOut ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LogOut className="h-3.5 w-3.5" />}
+            Cerrar sesión
           </button>
+        </div>
+
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+          <p className="text-xs text-slate-300">{t(locale, "agentStatus")}</p>
+          <p className="mt-1 text-sm font-semibold text-white">{t(locale, "aiEngineOn")}</p>
         </div>
       </div>
     </aside>
