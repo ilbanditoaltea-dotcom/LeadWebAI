@@ -108,6 +108,14 @@ export function WebsiteRenderer({ data }: WebsiteRendererProps) {
         : visualStyle === "urban" || visualStyle === "urban_fitness"
           ? "space-y-7"
           : "space-y-6";
+  const backgroundTreatmentClass =
+    design.backgroundTreatment === "dark_layers"
+      ? "bg-[radial-gradient(circle_at_20%_0%,rgba(255,255,255,0.08),transparent_40%)]"
+      : design.backgroundTreatment === "warm_gradient"
+        ? "bg-[radial-gradient(circle_at_10%_0%,rgba(251,191,36,0.18),transparent_45%)]"
+        : design.backgroundTreatment === "editorial_soft"
+          ? "bg-[radial-gradient(circle_at_85%_0%,rgba(167,139,250,0.15),transparent_45%)]"
+          : "";
   const orderedSections = [...normalized.website.sections]
     .sort((a, b) => a.order - b.order)
     .map((section, index) => ({
@@ -143,10 +151,13 @@ export function WebsiteRenderer({ data }: WebsiteRendererProps) {
         color: palette.text,
       }}
     >
-      <main className={`mx-auto w-full max-w-6xl px-4 py-6 md:px-8 md:py-10 ${sectionWrapperClass}`}>
+      <main className={`mx-auto w-full max-w-6xl px-4 py-6 md:px-8 md:py-10 ${sectionWrapperClass} ${backgroundTreatmentClass}`}>
         <HeroBlock website={normalizedWithVariants} />
         {orderedSections.map((section, index) => (
-          <div key={`${section.type}-${section.order}-${index}`}>
+          <div
+            key={`${section.type}-${section.order}-${index}`}
+            className={design.sectionLayoutClassByIndex[index] ?? ""}
+          >
             {renderSection(section, normalizedWithVariants, design)}
           </div>
         ))}

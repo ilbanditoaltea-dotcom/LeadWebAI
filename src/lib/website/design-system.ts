@@ -330,6 +330,7 @@ const heroFallback = ["split_image", "centered_editorial", "local_business"];
 
 function mapLegacyVisualStyle(input: string): VisualStylePreset {
   const style = input.toLowerCase();
+  if (style === "generic_local") return "modern_minimal";
   if (style === "warm_restaurant" || style === "mediterranean") return "warm_restaurant";
   if (style === "rustic_mediterranean") return "rustic_mediterranean";
   if (style === "premium_dark") return "premium_dark";
@@ -360,6 +361,12 @@ function pickDeterministic(options: string[], seed: string) {
   return options[index];
 }
 
+function rotateBySeed(items: string[], seed: string) {
+  if (items.length <= 1) return items;
+  const offset = simpleHash(seed) % items.length;
+  return [...items.slice(offset), ...items.slice(0, offset)];
+}
+
 function objectiveFlavor(goal: WebsiteGoal) {
   switch (goal) {
     case "get_reservations":
@@ -387,6 +394,7 @@ export type ResolvedWebsiteDesign = {
   shadowClass: DesignStyleConfig["shadowIntensity"];
   backgroundTreatment: DesignStyleConfig["backgroundTreatment"];
   typographyMood: string;
+  sectionLayoutClassByIndex: Record<number, string>;
 };
 
 type DesignInput = {
@@ -406,27 +414,50 @@ export function resolveWebsiteDesign(data: DesignInput): ResolvedWebsiteDesign {
   const style = mapLegacyVisualStyle(data.businessProfile.visualStyle);
   const config = websiteDesignSystem[style];
   const businessSeed = `${data.businessProfile.businessType}-${data.businessProfile.businessName}-${objectiveFlavor(data.businessProfile.mainGoal)}`;
+  const sectorSeed = `${data.businessProfile.businessType}-${objectiveFlavor(data.businessProfile.mainGoal)}`;
+  const diversitySeed = `${businessSeed}-${data.website.sections.length}`;
 
   const requestedHero = data.website.hero.variant?.toLowerCase().trim();
+  const rotatedHeroes = rotateBySeed(
+    config.heroVariantsAllowed.length > 0 ? config.heroVariantsAllowed : heroFallback,
+    `${sectorSeed}-${data.businessProfile.businessName}`,
+  );
   const heroVariant =
-    requestedHero && config.heroVariantsAllowed.includes(requestedHero)
+    requestedHero && rotatedHeroes.includes(requestedHero)
       ? requestedHero
-      : pickDeterministic(
-          config.heroVariantsAllowed.length > 0 ? config.heroVariantsAllowed : heroFallback,
-          businessSeed,
-        );
+      : pickDeterministic(rotatedHeroes, diversitySeed);
 
   const sectionVariantByIndex: Record<number, string> = {};
+  const sectionLayoutClassByIndex: Record<number, string> = {};
+  const lastVariantBySectionType = new Map<string, string>();
   data.website.sections.forEach((section, index) => {
     const requested = section.variant?.toLowerCase().trim();
-    const allowed = config.sectionVariantsAllowed[section.type] ?? [];
-    sectionVariantByIndex[index] =
+    const allowed = rotateBySeed(
+      config.sectionVariantsAllowed[section.type] ?? [],
+      `${sectorSeed}-${section.type}-${index}`,
+    );
+    const picked =
       requested && allowed.includes(requested)
         ? requested
         : pickDeterministic(
             allowed.length > 0 ? allowed : [requested || "default"],
-            `${businessSeed}-${section.type}-${index}`,
+            `${diversitySeed}-${section.type}-${index}`,
           );
+
+    const lastForType = lastVariantBySectionType.get(section.type);
+    const resolved =
+      lastForType && lastForType === picked && allowed.length > 1
+        ? allowed[(allowed.indexOf(picked) + 1) % allowed.length]
+        : picked;
+
+    sectionVariantByIndex[index] = resolved;
+    lastVariantBySectionType.set(section.type, resolved);
+    sectionLayoutClassByIndex[index] =
+      index % 3 === 0
+        ? "md:pl-0"
+        : index % 3 === 1
+          ? "md:pl-2"
+          : "md:pl-4";
   });
 
   return {
@@ -439,5 +470,6 @@ export function resolveWebsiteDesign(data: DesignInput): ResolvedWebsiteDesign {
     shadowClass: config.shadowIntensity,
     backgroundTreatment: config.backgroundTreatment,
     typographyMood: config.typographyMood,
+    sectionLayoutClassByIndex,
   };
 }

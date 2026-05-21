@@ -1,12 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { searchPlaces } from "@/src/lib/discovery/discovery-service";
+import { createBusinessProfileFromLead } from "@/src/lib/lead-intelligence/business-profile";
 
 const inputSchema = z.object({
-  query: z.string().min(2),
-  city: z.string().min(2),
-  category: z.string().min(2),
-  limit: z.number().int().min(1).max(100).default(20),
+  leadId: z.string().uuid(),
+  instruction: z.string().optional(),
 });
 
 export const runtime = "nodejs";
@@ -16,7 +14,7 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const input = inputSchema.parse(body);
-    const result = await searchPlaces(input);
+    const result = await createBusinessProfileFromLead(input);
     return NextResponse.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";

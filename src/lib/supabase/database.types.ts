@@ -309,6 +309,114 @@ export type Database = {
         };
         Relationships: [];
       };
+      places_data: {
+        Row: {
+          id: string;
+          lead_id: string | null;
+          place_id: string | null;
+          raw_data: Json | null;
+          created_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          lead_id?: string | null;
+          place_id?: string | null;
+          raw_data?: Json | null;
+          created_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          lead_id?: string | null;
+          place_id?: string | null;
+          raw_data?: Json | null;
+          created_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "places_data_lead_id_fkey";
+            columns: ["lead_id"];
+            isOneToOne: false;
+            referencedRelation: "leads";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      website_research: {
+        Row: {
+          id: string;
+          lead_id: string | null;
+          website_url: string | null;
+          title: string | null;
+          description: string | null;
+          summary: string | null;
+          extracted_data: Json | null;
+          detected_problems: Json | null;
+          created_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          lead_id?: string | null;
+          website_url?: string | null;
+          title?: string | null;
+          description?: string | null;
+          summary?: string | null;
+          extracted_data?: Json | null;
+          detected_problems?: Json | null;
+          created_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          lead_id?: string | null;
+          website_url?: string | null;
+          title?: string | null;
+          description?: string | null;
+          summary?: string | null;
+          extracted_data?: Json | null;
+          detected_problems?: Json | null;
+          created_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "website_research_lead_id_fkey";
+            columns: ["lead_id"];
+            isOneToOne: false;
+            referencedRelation: "leads";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      business_profiles: {
+        Row: {
+          id: string;
+          lead_id: string | null;
+          profile: Json;
+          created_at: string | null;
+          updated_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          lead_id?: string | null;
+          profile: Json;
+          created_at?: string | null;
+          updated_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          lead_id?: string | null;
+          profile?: Json;
+          created_at?: string | null;
+          updated_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "business_profiles_lead_id_fkey";
+            columns: ["lead_id"];
+            isOneToOne: false;
+            referencedRelation: "leads";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

@@ -697,6 +697,7 @@ function fallbackWebsiteBlueprint(
     urban_fitness: { primary: "#4338CA", secondary: "#22D3EE", background: "#F8FAFC", text: "#0F172A", accent: "#F43F5E" },
     industrial_automotive: { primary: "#1E293B", secondary: "#64748B", background: "#F8FAFC", text: "#0F172A", accent: "#F97316" },
     boutique_hotel: { primary: "#334155", secondary: "#A78BFA", background: "#F8FAFC", text: "#0F172A", accent: "#D97706" },
+    generic_local: { primary: "#475569", secondary: "#A78BFA", background: "#F8FAFC", text: "#0F172A", accent: "#06B6D4" },
     warm_restaurant: { primary: "#B45309", secondary: "#FB7185", background: "#FFF7ED", text: "#292524", accent: "#84CC16" },
     modern_minimal: { primary: "#475569", secondary: "#A78BFA", background: "#F8FAFC", text: "#0F172A", accent: "#06B6D4" },
     luxury: { primary: "#BE185D", secondary: "#F9A8D4", background: "#FFF1F2", text: "#3F3F46", accent: "#7C3AED" },

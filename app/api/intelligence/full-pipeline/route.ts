@@ -1,13 +1,6 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
-import { searchPlaces } from "@/src/lib/discovery/discovery-service";
-
-const inputSchema = z.object({
-  query: z.string().min(2),
-  city: z.string().min(2),
-  category: z.string().min(2),
-  limit: z.number().int().min(1).max(100).default(20),
-});
+import { fullPipelineInputSchema } from "@/src/lib/lead-intelligence/schemas";
+import { runFullPipeline } from "@/src/lib/lead-intelligence/full-pipeline";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -15,8 +8,8 @@ export const maxDuration = 60;
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const input = inputSchema.parse(body);
-    const result = await searchPlaces(input);
+    const input = fullPipelineInputSchema.parse(body);
+    const result = await runFullPipeline(input);
     return NextResponse.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";

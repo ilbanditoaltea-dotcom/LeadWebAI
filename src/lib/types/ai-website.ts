@@ -41,6 +41,7 @@ export const VISUAL_STYLES = [
   "urban_fitness",
   "industrial_automotive",
   "boutique_hotel",
+  "generic_local",
   "modern_minimal",
   "luxury",
   "playful",

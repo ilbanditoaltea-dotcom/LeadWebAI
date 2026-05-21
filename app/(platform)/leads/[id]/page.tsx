@@ -8,6 +8,7 @@ import {
 import { SalesMessageSection } from "@/app/components/leads/sales-message-section";
 import { ContactApprovalChecklist } from "@/app/components/leads/contact-approval-checklist";
 import { BeforeAfterSalesBrief } from "@/app/components/leads/before-after-sales-brief";
+import { LeadIntelligenceActions } from "@/app/components/leads/lead-intelligence-actions";
 import { OpportunityScore } from "@/app/components/ui/opportunity-score";
 import { StatusBadge } from "@/app/components/ui/status-badge";
 import { getDemoBusinessCaseByLeadId } from "@/app/lib/demo-business-cases";
@@ -27,6 +28,11 @@ function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
     value,
   );
+}
+
+function extractPlaceId(description: string | null | undefined) {
+  const match = (description ?? "").match(/place_id=([^\s]+)/i);
+  return match?.[1] ?? null;
 }
 
 async function getLeadById(id: string): Promise<LeadRow | null> {
@@ -230,6 +236,7 @@ export default async function LeadDetailPage({ params }: LeadDetailPageProps) {
   const salesAngle =
     generatedWebsite?.website.confidence.salesAngle ??
     "Propuesta orientada a convertir visitas locales en reservas/contactos.";
+  const placeId = extractPlaceId(dbLead?.description ?? null);
 
   return (
     <div className="space-y-6">
@@ -375,6 +382,8 @@ export default async function LeadDetailPage({ params }: LeadDetailPageProps) {
         demoSlug={demoSlug}
         status={generatedWebsiteResult.row?.status ?? mockCase?.campaignStatus ?? null}
       />
+
+      <LeadIntelligenceActions leadId={id} placeId={placeId} demoSlug={demoSlug} />
 
       <BeforeAfterSalesBrief
         businessName={businessName}

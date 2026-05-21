@@ -481,6 +481,47 @@ export function AiGeneratorWorkbench({ initialLeads }: AiGeneratorWorkbenchProps
     }
   }
 
+  async function handleFullPipeline() {
+    if (!selectedLead) {
+      setActionFeedback("Selecciona un negocio para ejecutar pipeline.");
+      return;
+    }
+    try {
+      setIsActionLoading(true);
+      setActionFeedback(null);
+      const response = await fetch("/api/intelligence/full-pipeline", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          leadId: selectedLead.id,
+          instruction: resolvedStyleInstruction,
+        }),
+      });
+      const json = (await response.json()) as {
+        error?: string;
+        generatedWebsiteId?: string;
+        demoSlug?: string;
+      };
+      if (!response.ok) {
+        setActionFeedback(json.error ?? "No se pudo ejecutar el pipeline completo.");
+        return;
+      }
+      if (json.generatedWebsiteId) {
+        setGeneratedWebsiteId(json.generatedWebsiteId);
+        await syncPreviewFromGeneratedWebsite(json.generatedWebsiteId, selectedLead.id);
+      }
+      setActionFeedback(
+        json.demoSlug
+          ? `Pipeline completado. Demo: /demo/${json.demoSlug}`
+          : "Pipeline completado correctamente.",
+      );
+    } catch {
+      setActionFeedback("Error inesperado en pipeline completo.");
+    } finally {
+      setIsActionLoading(false);
+    }
+  }
+
   async function handleSaveDemo() {
     if (!generatedWebsiteId.trim()) {
       setActionFeedback("Primero genera una demo para obtener generatedWebsiteId.");
@@ -674,6 +715,15 @@ export function AiGeneratorWorkbench({ initialLeads }: AiGeneratorWorkbenchProps
             >
               <WandSparkles className="h-4 w-4" />
               Generar con IA
+            </button>
+            <button
+              type="button"
+              onClick={handleFullPipeline}
+              disabled={isActionLoading}
+              className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <WandSparkles className="h-4 w-4" />
+              Pipeline completo
             </button>
             <button
               type="button"

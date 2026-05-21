@@ -34,13 +34,6 @@ type GeneratedWebsiteSectionProps = {
   status: string | null;
 };
 
-function defaultGoalByCategory(category: string): GeneratedWebsite["businessProfile"]["mainGoal"] {
-  if (category.includes("rest")) return "get_reservations";
-  if (category.includes("clinic") || category.includes("salud")) return "get_appointments";
-  if (category.includes("shop") || category.includes("tienda")) return "sell_products";
-  return "capture_leads";
-}
-
 export function GeneratedWebsiteSection({
   lead,
   generatedWebsite,
@@ -106,34 +99,27 @@ export function GeneratedWebsiteSection({
       setIsRegenerating(true);
       setFeedback(null);
 
-      const response = await fetch("/api/agent/generate-website", {
+      const response = await fetch("/api/intelligence/generate-website", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           leadId: lead.id,
-          businessName: lead.businessName,
-          category: lead.category,
-          city: lead.city,
-          description: lead.description,
-          phone: lead.phone,
-          email: lead.email,
-          whatsapp: lead.whatsapp,
-          address: lead.address,
-          websiteUrl: lead.websiteUrl,
-          detectedProblems: lead.detectedProblems,
-          recommendations: lead.recommendations,
-          targetGoal:
-            generatedWebsite?.businessProfile.mainGoal ?? defaultGoalByCategory(lead.category),
+          instruction: `Genera una web personalizada para ${lead.businessName} en ${lead.city}, evitando salida genérica.`,
         }),
       });
 
-      const json = (await response.json()) as { error?: string };
+      const json = (await response.json()) as { error?: string; demoSlug?: string };
       if (!response.ok) {
         setFeedback(json.error ?? "No se pudo regenerar la web.");
         return;
       }
 
-      setFeedback("Web regenerada correctamente. Refresca la pagina para ver la nueva version.");
+      setFeedback(
+        json.demoSlug
+          ? `Web regenerada correctamente. Demo: /demo/${json.demoSlug}`
+          : "Web regenerada correctamente. Refresca la página para ver la nueva versión.",
+      );
+      router.refresh();
     } catch {
       setFeedback("Error inesperado al regenerar la web.");
     } finally {
@@ -145,7 +131,7 @@ export function GeneratedWebsiteSection({
     mode: "style" | "copy" | "sections" | "hero",
     defaultInstruction: string,
   ) {
-    if (!generatedWebsite || !generatedWebsiteId) {
+    if (!generatedWebsite) {
       setFeedback("No existe una web generada para regenerar.");
       return;
     }
@@ -158,35 +144,26 @@ export function GeneratedWebsiteSection({
       setIsRegenerating(true);
       setFeedback(null);
 
-      const currentWebsiteJson = {
-        businessProfile: generatedWebsite.businessProfile,
-        website: {
-          hero: generatedWebsite.website.hero,
-          sections: generatedWebsite.website.sections,
-        },
-        seo: generatedWebsite.website.seo,
-        contact: generatedWebsite.website.contact,
-        confidence: generatedWebsite.website.confidence,
-      };
-
-      const response = await fetch("/api/agent/regenerate-website", {
+      const response = await fetch("/api/intelligence/regenerate-website", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          generatedWebsiteId,
-          currentWebsiteJson,
-          instruction,
-          mode,
+          leadId: lead.id,
+          instruction: `${instruction}. mode=${mode}.`,
         }),
       });
 
-      const json = (await response.json()) as { error?: string };
+      const json = (await response.json()) as { error?: string; demoSlug?: string };
       if (!response.ok) {
         setFeedback(json.error ?? "No se pudo regenerar.");
         return;
       }
 
-      setFeedback("Regeneración completada. Refrescando datos...");
+      setFeedback(
+        json.demoSlug
+          ? `Regeneración completada. Demo: /demo/${json.demoSlug}`
+          : "Regeneración completada. Refrescando datos...",
+      );
       router.refresh();
     } catch {
       setFeedback("Error inesperado en regeneración parcial.");
