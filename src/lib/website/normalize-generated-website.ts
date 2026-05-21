@@ -4,6 +4,7 @@ import {
   type JsonValue,
   type WebsiteColorPalette,
 } from "@/src/lib/types/ai-website";
+import { cleanMarketingText } from "@/src/lib/website/clean-marketing-text";
 
 export type NormalizedWebsiteSection = {
   type: string;
@@ -56,13 +57,17 @@ function normalizeSections(
     return {
       type: asString(source.type, "generic"),
       variant: asString(source.variant, "default"),
-      title: asString(source.title, `Sección ${index + 1}`),
-      subtitle: asString(source.subtitle, ""),
+      title: cleanMarketingText(asString(source.title, ""), `Sección ${index + 1}`, 80),
+      subtitle: cleanMarketingText(
+        asString(source.subtitle, ""),
+        "Contenido clave para convertir mejor.",
+        140,
+      ),
       imagePrompt:
         typeof source.imagePrompt === "string" ? source.imagePrompt : undefined,
       imageAlt: typeof source.imageAlt === "string" ? source.imageAlt : undefined,
       items: asItems(source.items),
-      cta: asString(source.cta, "Más información"),
+      cta: cleanMarketingText(asString(source.cta, ""), "Más información", 40),
       order:
         typeof source.order === "number" && Number.isFinite(source.order)
           ? source.order
@@ -123,14 +128,27 @@ export function normalizeGeneratedWebsite(data: GeneratedWebsite): NormalizedGen
     ...data,
     businessProfile: {
       ...data.businessProfile,
-      businessName: asString(data.businessProfile.businessName, fallback.businessProfile.businessName),
-      category: asString(data.businessProfile.category, fallback.businessProfile.category),
-      city: asString(data.businessProfile.city, fallback.businessProfile.city),
-      targetCustomer: asString(
-        data.businessProfile.targetCustomer,
-        fallback.businessProfile.targetCustomer,
+      businessName: cleanMarketingText(
+        asString(data.businessProfile.businessName, fallback.businessProfile.businessName),
+        fallback.businessProfile.businessName,
+        80,
       ),
-      tone: asString(data.businessProfile.tone, fallback.businessProfile.tone),
+      category: cleanMarketingText(
+        asString(data.businessProfile.category, fallback.businessProfile.category),
+        fallback.businessProfile.category,
+        80,
+      ),
+      city: asString(data.businessProfile.city, fallback.businessProfile.city),
+      targetCustomer: cleanMarketingText(
+        asString(data.businessProfile.targetCustomer, fallback.businessProfile.targetCustomer),
+        fallback.businessProfile.targetCustomer,
+        160,
+      ),
+      tone: cleanMarketingText(
+        asString(data.businessProfile.tone, fallback.businessProfile.tone),
+        fallback.businessProfile.tone,
+        120,
+      ),
       fontStyle: asString(data.businessProfile.fontStyle, fallback.businessProfile.fontStyle),
       imageStyle: asString(data.businessProfile.imageStyle, fallback.businessProfile.imageStyle),
       colorPalette: normalizePalette(
@@ -142,11 +160,23 @@ export function normalizeGeneratedWebsite(data: GeneratedWebsite): NormalizedGen
       hero: {
         ...data.website.hero,
         variant: asString(data.website.hero.variant, fallback.website.hero.variant),
-        eyebrow: asString(data.website.hero.eyebrow, fallback.website.hero.eyebrow),
-        title: asString(data.website.hero.title, fallback.website.hero.title),
-        subtitle: asString(data.website.hero.subtitle, fallback.website.hero.subtitle),
-        primaryCTA: asString(data.website.hero.primaryCTA, "Solicitar propuesta"),
-        secondaryCTA: asString(data.website.hero.secondaryCTA, "Ver servicios"),
+        eyebrow: cleanMarketingText(
+          asString(data.website.hero.eyebrow, fallback.website.hero.eyebrow),
+          fallback.website.hero.eyebrow,
+          70,
+        ),
+        title: cleanMarketingText(
+          asString(data.website.hero.title, fallback.website.hero.title),
+          fallback.website.hero.title,
+          90,
+        ),
+        subtitle: cleanMarketingText(
+          asString(data.website.hero.subtitle, fallback.website.hero.subtitle),
+          "Propuesta digital orientada a captar más clientes cualificados.",
+          180,
+        ),
+        primaryCTA: cleanMarketingText(asString(data.website.hero.primaryCTA, ""), "Solicitar propuesta", 40),
+        secondaryCTA: cleanMarketingText(asString(data.website.hero.secondaryCTA, ""), "Ver servicios", 40),
         backgroundImagePrompt: asString(
           data.website.hero.backgroundImagePrompt,
           fallback.website.hero.backgroundImagePrompt,
@@ -154,8 +184,16 @@ export function normalizeGeneratedWebsite(data: GeneratedWebsite): NormalizedGen
       },
       sections: normalizeSections(data.website.sections, fallbackSections),
       seo: {
-        title: asString(data.website.seo.title, fallback.website.seo.title),
-        description: asString(data.website.seo.description, fallback.website.seo.description),
+        title: cleanMarketingText(
+          asString(data.website.seo.title, fallback.website.seo.title),
+          fallback.website.seo.title,
+          90,
+        ),
+        description: cleanMarketingText(
+          asString(data.website.seo.description, fallback.website.seo.description),
+          fallback.website.seo.description,
+          180,
+        ),
         keywords: Array.isArray(data.website.seo.keywords)
           ? data.website.seo.keywords.map((item) => String(item))
           : fallback.website.seo.keywords,
@@ -167,8 +205,16 @@ export function normalizeGeneratedWebsite(data: GeneratedWebsite): NormalizedGen
         address: asString(data.website.contact.address, "unknown"),
       },
       confidence: {
-        reasoning: asString(data.website.confidence.reasoning, fallback.website.confidence.reasoning),
-        salesAngle: asString(data.website.confidence.salesAngle, fallback.website.confidence.salesAngle),
+        reasoning: cleanMarketingText(
+          asString(data.website.confidence.reasoning, fallback.website.confidence.reasoning),
+          fallback.website.confidence.reasoning,
+          220,
+        ),
+        salesAngle: cleanMarketingText(
+          asString(data.website.confidence.salesAngle, fallback.website.confidence.salesAngle),
+          fallback.website.confidence.salesAngle,
+          180,
+        ),
         detectedProblems: Array.isArray(data.website.confidence.detectedProblems)
           ? data.website.confidence.detectedProblems.map((item) => String(item))
           : fallback.website.confidence.detectedProblems,

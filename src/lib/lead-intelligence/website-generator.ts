@@ -7,6 +7,7 @@ import {
 import { WEBSITE_GENERATION_SYSTEM_PROMPT, buildWebsitePrompt } from "@/src/lib/lead-intelligence/prompts";
 import { callOpenAiJson } from "@/src/lib/lead-intelligence/openai-client";
 import { normalizeGeneratedWebsite } from "@/src/lib/lead-intelligence/normalize";
+import { cleanMarketingText } from "@/src/lib/website/clean-marketing-text";
 import { inferWebsiteStyle } from "@/src/lib/design-system/website-styles";
 
 function slugify(input: string) {
@@ -60,7 +61,11 @@ function fallbackWebsite(profile: BusinessIntelligenceProfile) {
         variant: "local_business",
         eyebrow: profile.identity.category,
         title: `${profile.identity.businessName}: web diseñada para convertir`,
-        subtitle: profile.currentDigitalPresence.websiteSummary,
+        subtitle: cleanMarketingText(
+          profile.currentDigitalPresence.websiteSummary,
+          "Propuesta digital orientada a captar más clientes cualificados.",
+          180,
+        ),
         primaryCTA: "Solicitar información",
         secondaryCTA: "Ver servicios",
         backgroundImagePrompt: profile.visualIdentity.heroImagePrompt,

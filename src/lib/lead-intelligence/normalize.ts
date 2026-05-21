@@ -1,4 +1,5 @@
 import type { BusinessIntelligenceProfile, GeneratedWebsiteOutput } from "@/src/lib/lead-intelligence/schemas";
+import { cleanMarketingText } from "@/src/lib/website/clean-marketing-text";
 
 const defaultSections = [
   "services",
@@ -8,26 +9,6 @@ const defaultSections = [
   "process",
   "final_cta",
 ];
-
-function looksTechnicalDump(value: string) {
-  if (!value) return false;
-  const candidate = value.toLowerCase();
-  return (
-    candidate.includes("window.") ||
-    candidate.includes('"code"') ||
-    candidate.includes('"locale"') ||
-    candidate.includes('"dimension"') ||
-    candidate.includes('"position"') ||
-    candidate.includes('"published"') ||
-    /\{[\s\S]{80,}\}/.test(value)
-  );
-}
-
-function cleanMarketingText(value: string, fallback: string, maxLen = 180) {
-  const trimmed = (value ?? "").replace(/\s+/g, " ").trim();
-  if (!trimmed || looksTechnicalDump(trimmed)) return fallback;
-  return trimmed.slice(0, maxLen);
-}
 
 export function normalizeBusinessProfile(input: BusinessIntelligenceProfile): BusinessIntelligenceProfile {
   const sections =

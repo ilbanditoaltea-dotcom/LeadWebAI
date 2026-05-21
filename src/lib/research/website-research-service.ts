@@ -2,23 +2,13 @@ import { createSupabaseServerClient } from "@/src/lib/supabase/server";
 import type { Json } from "@/src/lib/supabase/database.types";
 import { crawlWithFirecrawl } from "@/src/lib/research/firecrawl";
 import { crawlWithScrapingBee } from "@/src/lib/research/scrapingbee";
+import { stripTechnicalNoise } from "@/src/lib/website/clean-marketing-text";
 
 function toPlainText(value: string) {
   return value
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
     .replace(/<[^>]+>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function stripTechnicalNoise(value: string) {
-  return value
-    .replace(/window\.[a-zA-Z0-9_]+\s*=\s*\{[\s\S]*?\};?/g, " ")
-    .replace(/\{[\s\S]{120,}\}/g, " ")
-    .replace(/"code"\s*:\s*"[^"]+"/gi, " ")
-    .replace(/"name"\s*:\s*"[^"]+"/gi, " ")
-    .replace(/\b(lang|currency|locale|dimension|position|image|published)\b/gi, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
