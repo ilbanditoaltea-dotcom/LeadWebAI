@@ -51,6 +51,8 @@ Rules:
 - valid JSON only.
 - no text outside JSON.
 - no React/HTML.
+- no technical dumps, no script snippets, no raw objects in copy fields.
+- hero.title, hero.subtitle and section texts must be human-readable marketing copy.
 - 6-10 sections.
 - always include final_cta section.
 - use businessProfile.websiteStrategy to pick section order.

@@ -12,6 +12,17 @@ function toPlainText(value: string) {
     .trim();
 }
 
+function stripTechnicalNoise(value: string) {
+  return value
+    .replace(/window\.[a-zA-Z0-9_]+\s*=\s*\{[\s\S]*?\};?/g, " ")
+    .replace(/\{[\s\S]{120,}\}/g, " ")
+    .replace(/"code"\s*:\s*"[^"]+"/gi, " ")
+    .replace(/"name"\s*:\s*"[^"]+"/gi, " ")
+    .replace(/\b(lang|currency|locale|dimension|position|image|published)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function pickMatches(raw: string, pattern: RegExp, limit: number) {
   return Array.from(raw.matchAll(pattern))
     .map((match) => (match[1] ?? match[0] ?? "").trim())
@@ -28,6 +39,26 @@ function detectProblems(raw: string) {
   if (!plain.includes("opin") && !plain.includes("review")) issues.push("falta prueba social");
   if (!plain.includes("seo") && !plain.includes("google")) issues.push("señales SEO local débiles");
   return issues;
+}
+
+function buildHumanSummary(params: {
+  title: string | null;
+  description: string | null;
+  headings: string[];
+  ctas: string[];
+  plain: string;
+}) {
+  const cleanPlain = stripTechnicalNoise(params.plain);
+  const keyHeadings = params.headings.slice(0, 4).join(" | ");
+  const keyCtas = params.ctas.slice(0, 4).join(", ");
+  const pieces = [
+    params.title,
+    params.description,
+    keyHeadings ? `Secciones destacadas: ${keyHeadings}` : null,
+    keyCtas ? `CTAs detectados: ${keyCtas}` : null,
+    cleanPlain.slice(0, 420),
+  ].filter((item): item is string => Boolean(item && item.trim()));
+  return pieces.join(". ").slice(0, 900);
 }
 
 export async function researchWebsite(params: {
@@ -69,9 +100,10 @@ export async function researchWebsite(params: {
   );
   const socials = links.filter((item) => /(instagram|facebook|tiktok|linkedin|youtube)/i.test(item));
 
+  const safeMainText = stripTechnicalNoise(plain).slice(0, 8000);
   const extractedData = {
     headings,
-    mainText: plain.slice(0, 8000),
+    mainText: safeMainText,
     services: headings.filter((item) => /(servicio|tratamiento|service|producto|menu|carta)/i.test(item)),
     products: headings.filter((item) => /(producto|catalog|tienda|shop)/i.test(item)),
     menuHints: headings.filter((item) => /(menu|carta|dish|plato)/i.test(item)),
@@ -80,7 +112,13 @@ export async function researchWebsite(params: {
     socialLinks: socials,
   };
 
-  const summary = plain.slice(0, 2000);
+  const summary = buildHumanSummary({
+    title,
+    description: metaDescription,
+    headings,
+    ctas,
+    plain: safeMainText,
+  });
   const problems = detectProblems(raw);
 
   const { data, error } = await supabase

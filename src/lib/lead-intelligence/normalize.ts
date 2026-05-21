@@ -9,6 +9,26 @@ const defaultSections = [
   "final_cta",
 ];
 
+function looksTechnicalDump(value: string) {
+  if (!value) return false;
+  const candidate = value.toLowerCase();
+  return (
+    candidate.includes("window.") ||
+    candidate.includes('"code"') ||
+    candidate.includes('"locale"') ||
+    candidate.includes('"dimension"') ||
+    candidate.includes('"position"') ||
+    candidate.includes('"published"') ||
+    /\{[\s\S]{80,}\}/.test(value)
+  );
+}
+
+function cleanMarketingText(value: string, fallback: string, maxLen = 180) {
+  const trimmed = (value ?? "").replace(/\s+/g, " ").trim();
+  if (!trimmed || looksTechnicalDump(trimmed)) return fallback;
+  return trimmed.slice(0, maxLen);
+}
+
 export function normalizeBusinessProfile(input: BusinessIntelligenceProfile): BusinessIntelligenceProfile {
   const sections =
     input.websiteStrategy.sectionsToGenerate.length >= 6
@@ -25,7 +45,11 @@ export function normalizeBusinessProfile(input: BusinessIntelligenceProfile): Bu
     },
     currentDigitalPresence: {
       ...input.currentDigitalPresence,
-      websiteSummary: input.currentDigitalPresence.websiteSummary || "Sin resumen de web disponible.",
+      websiteSummary: cleanMarketingText(
+        input.currentDigitalPresence.websiteSummary,
+        "Presencia digital mejorable con foco en confianza, claridad y conversión.",
+        420,
+      ),
     },
   };
 }
@@ -71,16 +95,64 @@ export function normalizeGeneratedWebsite(
 
   return {
     ...website,
+    businessProfile: {
+      ...website.businessProfile,
+      businessName: cleanMarketingText(
+        website.businessProfile.businessName,
+        "Negocio local",
+        80,
+      ),
+      category: cleanMarketingText(website.businessProfile.category, "servicios locales", 80),
+      targetCustomer: cleanMarketingText(
+        website.businessProfile.targetCustomer,
+        "Clientes locales con intención de compra",
+        160,
+      ),
+      tone: cleanMarketingText(website.businessProfile.tone, "Profesional y cercano", 120),
+    },
     website: {
       ...website.website,
+      hero: {
+        ...website.website.hero,
+        eyebrow: cleanMarketingText(website.website.hero.eyebrow, "Negocio local", 70),
+        title: cleanMarketingText(
+          website.website.hero.title,
+          "Web profesional diseñada para convertir",
+          90,
+        ),
+        subtitle: cleanMarketingText(
+          website.website.hero.subtitle,
+          "Propuesta digital orientada a captar más clientes cualificados.",
+          180,
+        ),
+        primaryCTA: cleanMarketingText(website.website.hero.primaryCTA, "Solicitar información", 40),
+        secondaryCTA: cleanMarketingText(website.website.hero.secondaryCTA, "Ver servicios", 40),
+      },
       sections: finalSections
         .sort((a, b) => a.order - b.order)
         .slice(0, 10)
-        .map((item, index) => ({ ...item, order: index + 1 })),
+        .map((item, index) => ({
+          ...item,
+          title: cleanMarketingText(item.title, `Sección ${index + 1}`, 80),
+          subtitle: cleanMarketingText(item.subtitle, "Contenido clave para convertir mejor.", 140),
+          cta: cleanMarketingText(item.cta, "Más información", 40),
+          imagePrompt: cleanMarketingText(item.imagePrompt, "professional business visual", 180),
+          imageAlt: cleanMarketingText(item.imageAlt, "business visual", 80),
+          order: index + 1,
+        })),
     },
     confidence: {
       ...website.confidence,
-      reasoning: website.confidence.reasoning || "Generated with fallback-safe normalization.",
+      reasoning: cleanMarketingText(
+        website.confidence.reasoning,
+        "Generated with fallback-safe normalization.",
+        220,
+      ),
+      salesAngle: cleanMarketingText(
+        website.confidence.salesAngle,
+        "Propuesta orientada a mejorar conversión local.",
+        180,
+      ),
     },
   };
 }
