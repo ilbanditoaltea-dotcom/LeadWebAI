@@ -5,6 +5,7 @@ import {
   generateCustomWebsiteOutputSchema,
   type GenerateCustomWebsiteOutput,
 } from "@/src/lib/ai/generate-custom-website";
+import { coerceGeneratedWebsiteOutput } from "@/src/lib/ai/coerce-generated-website";
 import type { Json } from "@/src/lib/supabase/database.types";
 import { VISUAL_STYLES, type VisualStyle } from "@/src/lib/types/ai-website";
 
@@ -12,11 +13,19 @@ export type RegenerationMode = "style" | "copy" | "sections" | "hero";
 
 export const regenerateWebsiteInputSchema = z.object({
   generatedWebsiteId: z.string().min(1),
-  currentWebsiteJson: generateCustomWebsiteOutputSchema,
+  currentWebsiteJson: z.unknown(),
   instruction: z.string().min(3),
-});
+}).transform((input) => ({
+  generatedWebsiteId: input.generatedWebsiteId,
+  instruction: input.instruction,
+  currentWebsiteJson: coerceGeneratedWebsiteOutput(input.currentWebsiteJson),
+}));
 
-export type RegenerateWebsiteInput = z.infer<typeof regenerateWebsiteInputSchema>;
+export type RegenerateWebsiteInput = {
+  generatedWebsiteId: string;
+  currentWebsiteJson: GenerateCustomWebsiteOutput;
+  instruction: string;
+};
 
 function modeGuidance(mode: RegenerationMode) {
   if (mode === "style") {

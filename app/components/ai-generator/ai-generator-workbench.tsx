@@ -643,20 +643,25 @@ export function AiGeneratorWorkbench({ initialLeads }: AiGeneratorWorkbenchProps
         return;
       }
 
-      const response = await fetch("/api/agent/regenerate-website", {
+      const regenerateEndpointByMode = {
+        style: "/api/ai/regenerate-style",
+        copy: "/api/ai/regenerate-copy",
+        sections: "/api/ai/regenerate-sections",
+        hero: "/api/ai/regenerate-hero",
+      } as const;
+
+      const response = await fetch(regenerateEndpointByMode[mode], {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           generatedWebsiteId: generatedWebsiteId.trim(),
           currentWebsiteJson,
           instruction,
-          mode,
         }),
       });
 
       const json = (await response.json()) as (Partial<AgentWebsiteJson> & {
         error?: string;
-        mode?: "live_agent" | "mock_fallback";
       });
       if (!response.ok) {
         setActionFeedback(json.error ?? "No se pudo regenerar.");
@@ -681,11 +686,7 @@ export function AiGeneratorWorkbench({ initialLeads }: AiGeneratorWorkbenchProps
         await syncPreviewFromGeneratedWebsite(generatedWebsiteId.trim(), selectedLeadId);
       }
 
-      setActionFeedback(
-        json.mode === "mock_fallback"
-          ? "Regeneración aplicada en modo mock_fallback (cambios limitados)."
-          : "Regeneración aplicada con IA y vista previa actualizada.",
-      );
+      setActionFeedback("Regeneración aplicada con IA y vista previa actualizada.");
     } catch {
       setActionFeedback("Error inesperado en regeneración parcial.");
     } finally {

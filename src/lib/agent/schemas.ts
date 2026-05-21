@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { analyzeBusinessInputSchema } from "@/src/lib/ai/analyze-business";
-import { generateCustomWebsiteInputSchema, generateCustomWebsiteOutputSchema } from "@/src/lib/ai/generate-custom-website";
+import { generateCustomWebsiteInputSchema } from "@/src/lib/ai/generate-custom-website";
+import { coerceGeneratedWebsiteOutput } from "@/src/lib/ai/coerce-generated-website";
 import { generateSalesMessageInputSchema } from "@/src/lib/ai/generate-sales-message";
 
 export const agentAnalyzeBusinessInputSchema = analyzeBusinessInputSchema;
@@ -9,10 +10,15 @@ export const agentGenerateMessageInputSchema = generateSalesMessageInputSchema;
 
 export const agentRegenerateWebsiteInputSchema = z.object({
   generatedWebsiteId: z.string().min(1),
-  currentWebsiteJson: generateCustomWebsiteOutputSchema,
+  currentWebsiteJson: z.unknown(),
   instruction: z.string().min(3),
   mode: z.enum(["style", "copy", "sections", "hero"]),
-});
+}).transform((input) => ({
+  generatedWebsiteId: input.generatedWebsiteId,
+  instruction: input.instruction,
+  mode: input.mode,
+  currentWebsiteJson: coerceGeneratedWebsiteOutput(input.currentWebsiteJson),
+}));
 
 export const agentNextActionInputSchema = z.object({
   leadId: z.string().min(1),
